@@ -106,7 +106,7 @@ sequenceDiagram
     participant Engine as RecoilEngine
     participant BAR as BAR Game
     participant AI as AI Interface
-    participant DotNet as .NET Wrapper
+    participant FSharp as F# Wrapper
     participant BotAI as BAR AI Bot
     
     Note over Engine,BotAI: Game Initialization
@@ -115,16 +115,17 @@ sequenceDiagram
     Engine->>BAR: Load gamedata/ definitions
     BAR->>Engine: Unit/Weapon/Rules definitions
     Engine->>AI: Initialize AI interface
-    AI->>DotNet: Create .NET wrapper instance
-    DotNet->>BotAI: Initialize BAR AI
+    AI->>FSharp: Create F# wrapper instance
+    FSharp->>BotAI: Initialize BAR AI with world arrays
     
-    Note over Engine,BotAI: Runtime Game Loop
-    Engine->>AI: Game events (units, combat, etc.)
-    AI->>DotNet: Marshal events to .NET
-    DotNet->>BotAI: Typed BAR game events
-    BotAI->>DotNet: AI decisions & commands
-    DotNet->>AI: Marshal commands to C
-    AI->>Engine: Execute commands
+    Note over Engine,BotAI: Data-Oriented Game Loop
+    Engine->>AI: Fill event arrays (batch)
+    AI->>FSharp: fillEventArray(events[], count)
+    FSharp->>FSharp: Update world state arrays
+    FSharp->>BotAI: processFrame(worldState, events[])
+    BotAI->>FSharp: return commands[] (batch)
+    FSharp->>AI: executeCommands(commands[], count)
+    AI->>Engine: Execute command batch
     Engine->>BAR: Apply commands to game state
 ```
 
