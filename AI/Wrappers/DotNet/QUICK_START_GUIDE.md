@@ -1,9 +1,10 @@
-# Quick Start Guide: Data-Oriented F# AI Development
+# Quick Start Guide: Pure F# Data-Oriented AI Development
 
 ## 🚀 Getting Started in 5 Minutes
 
 ### Prerequisites
 - .NET 8.0 SDK
+- F# support (included with .NET SDK)
 - Visual Studio 2022 or VS Code with F# extensions
 - CMake (for native builds)
 - RecoilEngine development environment
@@ -13,7 +14,7 @@
 #### 1. Set Up Development Environment
 ```bash
 # Clone and navigate to wrapper directory
-cd AI/Wrappers/DotNet
+cd AI/Wrappers/DotNet/FSharp-Recoil-Wrapper
 
 # Create initial build structure
 mkdir -p build
@@ -23,21 +24,23 @@ make  # or use Visual Studio on Windows
 ```
 
 #### 2. Start with Milestone 1.1 (Week 1)
-**Focus**: Get basic native interop working
+**Focus**: Get basic native array filling working
 
 ```cpp
-// src/native/SpringAIWrapperExports.cpp
+// native/SpringAIWrapperExports.cpp
 extern "C" {
-    EXPORT float GetMetal() {
-        return 100.0f; // Mock data for testing
+    EXPORT int FillUnitArray(Unit* units, int maxCount) {
+        // Fill array with mock data for testing
+        for(int i = 0; i < min(maxCount, 5); i++) {
+            units[i] = { id: i, defId: 1, health: 100.0f };
+        }
+        return min(maxCount, 5);
     }
     
-    EXPORT float GetEnergy() {
-        return 50.0f; // Mock data for testing
-    }
-    
-    EXPORT int GetUnitCount() {
-        return 5; // Mock data for testing
+    EXPORT bool FillResourceState(ResourceState* resources) {
+        resources->metal = 100.0f;
+        resources->energy = 50.0f;
+        return true;
     }
 }
 ```
@@ -46,16 +49,17 @@ extern "C" {
 ```fsharp
 // test/BasicInteropTests.fs
 [<Test>]
-let ``Native interop returns mock data`` () =
-    let metal = NativeInterop.GetMetal()
+let ``Native array filling works`` () =
+    let units = Array.zeroCreate<Unit> 10
+    let count = NativeInterop.FillUnitArray(units, 10)
     metal |> should equal 100.0f<metal>
 ```
 
 #### 4. Validate Build System
 ```bash
 # Test that everything compiles
-dotnet build src/fsharp-core/SpringAI.Core.fsproj
-dotnet test test/SpringAI.Tests.fsproj
+dotnet build FSharp-Recoil-Wrapper/src/SpringAI.Core.fsproj
+dotnet test FSharp-Recoil-Wrapper/test/SpringAI.Tests.fsproj
 ```
 
 ## 📋 Development Checklist by Phase
@@ -68,9 +72,9 @@ dotnet test test/SpringAI.Tests.fsproj
 - [ ] Test infrastructure is set up
 
 **Key Files to Create:**
-- `src/native/SpringAIWrapperExports.cpp`
-- `src/fsharp-core/Types.fs` (basic version)
-- `src/fsharp-core/Interop.fs` (basic P/Invoke)
+- `native/SpringAIWrapperExports.cpp`
+- `src/Types.fs` (basic version)
+- `src/Interop.fs` (basic P/Invoke)
 - `test/BasicInteropTests.fs`
 
 ### Phase 2: Data Structures (Week 3-4)
@@ -80,21 +84,21 @@ dotnet test test/SpringAI.Tests.fsproj
 - [ ] Performance benchmarks show improvement
 
 **Key Files to Create:**
-- `src/fsharp-core/Types.fs` (complete WorldState)
-- `src/fsharp-core/GameContext.fs` (spatial operations)
+- `src/Types.fs` (complete WorldState)
+- `src/GameContext.fs` (spatial operations)
 - `test/SpatialGridTests.fs`
 - `benchmarks/ArrayProcessingBenchmarks.fs`
 
-### Phase 3: Event System (Week 5-6)
-- [ ] Event batching architecture
-- [ ] Efficient event collection
-- [ ] AI interface with batch support
+### Phase 3: Data Pipeline (Week 5-6)
+- [ ] Direct array filling architecture
+- [ ] Pure function AI interface
+- [ ] World state management
 - [ ] Performance monitoring
 
 **Key Files to Create:**
-- `src/fsharp-core/AI.fs` (enhanced with batching)
-- `src/fsharp-core/Events.fs`
-- `test/EventBatchingTests.fs`
+- `src/AI.fs` (pure function interface)
+- `src/WorldState.fs`
+- `test/WorldStateTests.fs`
 
 ### Phase 4: Commands (Week 7-8)
 - [ ] Command batching system
@@ -103,22 +107,22 @@ dotnet test test/SpringAI.Tests.fsproj
 - [ ] GC pressure optimization
 
 **Key Files to Create:**
-- `src/fsharp-core/Commands.fs` (complete)
-- `src/native/CommandBatchExecution.cpp`
+- `src/Commands.fs` (complete)
+- `native/CommandBatchExecution.cpp`
 - `test/CommandBatchTests.fs`
 - `benchmarks/MemoryPoolBenchmarks.fs`
 
-### Phase 5: C# Integration (Week 9-10)
-- [ ] C# wrapper interfaces
-- [ ] Type converters
+### Phase 5: BAR AI Implementation (Week 9-10)
+- [ ] BAR-specific AI logic
+- [ ] Economic strategies
+- [ ] Military tactics
 - [ ] Integration testing
-- [ ] End-to-end scenarios
 
 **Key Files to Create:**
-- `src/csharp-compat/AI/ICSharpAI.cs` (enhanced)
-- `src/csharp-compat/TypeConverters.cs`
-- `test/CSharpIntegrationTests.cs`
-- `examples/CSharp/ExampleCSharpAI.cs`
+- `../FSharp-BAR-AI/src/FSharpAI.fs` (complete)
+- `../FSharp-BAR-AI/examples/ExampleAI.fs`
+- `test/BARIntegrationTests.fs`
+- `examples/AdvancedExamples.fs`
 
 ### Phase 6: Advanced Features (Week 11-12)
 - [ ] Multi-system AI architecture
@@ -140,7 +144,7 @@ dotnet test test/SpringAI.Tests.fsproj
 
 ### Essential NuGet Packages
 ```xml
-<!-- src/fsharp-core/SpringAI.Core.fsproj -->
+<!-- FSharp-Recoil-Wrapper/src/SpringAI.Core.fsproj -->
 <PackageReference Include="FSharp.Core" Version="8.0.0" />
 <PackageReference Include="System.Numerics.Vectors" Version="4.5.0" />
 <PackageReference Include="BenchmarkDotNet" Version="0.13.0" />
@@ -153,19 +157,21 @@ dotnet test test/SpringAI.Tests.fsproj
 # build.sh - Complete build script
 
 echo "Building native library..."
-cd src/native
+cd FSharp-Recoil-Wrapper/native
 mkdir -p build && cd build
 cmake .. && make
 
-echo "Building F# core..."
-cd ../../../
-dotnet build src/fsharp-core/SpringAI.Core.fsproj
+echo "Building F# wrapper..."
+cd ../../src
+dotnet build SpringAI.Core.fsproj
 
-echo "Building C# compatibility..."
-dotnet build src/csharp-compat/SpringAI.CSharp.csproj
+echo "Building BAR AI..."
+cd ../../FSharp-BAR-AI/src
+dotnet build BAR.AI.fsproj
 
 echo "Running tests..."
-dotnet test test/SpringAI.Tests.fsproj
+cd ../
+dotnet test
 
 echo "Running benchmarks..."
 dotnet run --project benchmarks/SpringAI.Benchmarks.fsproj
@@ -226,15 +232,15 @@ let ``Spatial queries beat linear search`` () = // ✅ 10x improvement
 let ``Array operations use SIMD`` () = // ✅ Vector instructions
 ```
 
-### Week 5-6: Event System Success
+### Week 5-6: Data Pipeline Success
 ```fsharp
-// Should handle these loads
+// Should handle these loads efficiently
 [<Test>]
-let ``Process 1000 events in <1ms`` () = // ✅ Batch processing
+let ``Process world state update in <1ms`` () = // ✅ Direct array filling
 [<Test>]
 let ``Memory stable over 1000 frames`` () = // ✅ No memory leaks
 [<Test>]
-let ``Event ordering preserved`` () = // ✅ Correctness
+let ``AI function returns valid commands`` () = // ✅ Pure function correctness
 ```
 
 ## 🚨 Common Pitfalls & Solutions

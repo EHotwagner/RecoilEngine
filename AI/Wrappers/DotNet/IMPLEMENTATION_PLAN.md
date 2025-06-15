@@ -1,11 +1,11 @@
-# Implementation Plan: Data-Oriented F# AI Wrapper for RecoilEngine/Spring
+# Implementation Plan: Pure F# Data-Oriented AI Wrapper for RecoilEngine/Spring
 
 ## Project Overview
 
-**Goal**: Create a high-performance, F#-first, data-oriented .NET AI wrapper for RecoilEngine/Spring, optimized for Beyond All Reason (BAR) AI development.
+**Goal**: Create a high-performance, pure F# data-oriented AI wrapper for RecoilEngine/Spring, optimized for Beyond All Reason (BAR) AI development with transparent data pipeline architecture.
 
-**Duration**: ~8-12 weeks (depending on team size and experience)
-**Target Performance**: 3-5x improvement over traditional OOP approaches
+**Duration**: ~6-8 weeks (pure F# data-oriented implementation)
+**Target Performance**: 3-5x improvement over traditional object-oriented approaches
 
 ---
 
@@ -16,10 +16,9 @@
 **Goal**: Establish basic native interop layer
 
 #### Tasks:
-1. **Create Native C++ Stub Library**
-   ```bash
+1. **Create Native C++ Stub Library**   ```bash
    # Directory structure
-   src/native/
+   native/
    ├── SpringAIWrapperInterface.h
    ├── SpringAIWrapperInterface.cpp
    ├── SpringAIWrapperExports.cpp
@@ -51,13 +50,11 @@
 - [ ] Unit count and basic unit data retrieval works
 
 #### Test Plan:
-```csharp
-[Test]
-public void NativeInterface_GetMetal_ReturnsValue()
-{
-    var metal = NativeInterop.GetMetal();
-    Assert.That(metal, Is.GreaterThanOrEqualTo(0));
-}
+```fsharp
+[<Test>]
+let ``NativeInterface GetMetal returns value`` () =
+    let metal = NativeInterop.GetMetal()
+    metal |> should be (greaterThanOrEqualTo 0.0f<metal>)
 ```
 
 ### Milestone 1.2: F# Core Types and Interop
@@ -215,64 +212,73 @@ let ``Spatial grid radius query finds nearby units`` () =
 
 ---
 
-## Phase 3: Event System & Batch Processing (Week 5-6)
+## Phase 3: Data Pipeline & Array Processing (Week 5-6)
 
-### Milestone 3.1: Event Batching Architecture
+### Milestone 3.1: Data-Oriented Pipeline Architecture
 **Duration**: 4-5 days
-**Goal**: Implement efficient event collection and processing
+**Goal**: Implement transparent data flow pipeline without event abstractions
 
 #### Tasks:
-1. **Event Batch Types**
+1. **World State Array Types**
    ```fsharp
-   type GameEvent = 
-       | UnitCreated of unitId: int * builderId: int * frame: int<frame>
-       | UnitDestroyed of unitId: int * attackerId: int * frame: int<frame>
-       | FrameUpdate of frame: int<frame>
+   type WorldState = {
+       Frame: int
+       Units: Unit[]
+       Resources: ResourceState
+       SpatialGrid: SpatialGrid
+       LastUpdateTime: int64
+   }
    
-   type EventBatch = {
-       Events: GameEvent array
-       EventCount: int
-       FrameNumber: int<frame>
+   type Unit = {
+       Id: int
+       DefId: int
+       Position: Vector3
+       Health: float32<health>
+       TeamId: int
+       State: UnitState
    }
    ```
 
-2. **Event Collection System**
+2. **Direct Array Fill System**
    ```fsharp
-   type EventCollector() =
-       let eventBuffer = ResizeArray<GameEvent>()
+   module NativeArrayFiller =
+       // Direct P/Invoke functions that fill F# arrays
+       [<DllImport("SpringAIWrapper")>]
+       extern int FillUnitArray(Unit[] units, int maxCount)
        
-       member this.AddEvent(event: GameEvent) = eventBuffer.Add(event)
-       member this.FlushEvents(frame: int<frame>) : EventBatch = 
-           let events = eventBuffer.ToArray()
-           eventBuffer.Clear()
-           { Events = events; EventCount = events.Length; FrameNumber = frame }
+       [<DllImport("SpringAIWrapper")>]
+       extern bool FillResourceState(ResourceState& resources)
+       
+       let updateWorldState (worldState: WorldState) : WorldState =
+           // Native code fills arrays directly - no event processing
+           let unitCount = FillUnitArray(worldState.Units, worldState.Units.Length)
+           let mutable resources = worldState.Resources
+           FillResourceState(&resources)
+           { worldState with Resources = resources }
    ```
 
-3. **Batch Processing Pipeline**
+3. **Pure Function Processing Pipeline**
    ```fsharp
-   let processEventBatch (batch: EventBatch) (processor: GameEvent -> unit) : unit =
-       // Process in chunks to avoid memory pressure
-       let chunkSize = 100
-       batch.Events
-       |> Array.chunkBySize chunkSize
-       |> Array.iter (Array.iter processor)
+   let processAIFrame (aiFunction: WorldState -> Command[]) (worldState: WorldState) : Command[] =
+       // Simple, transparent pipeline: fill arrays → process → return commands
+       let updatedWorld = NativeArrayFiller.updateWorldState worldState
+       aiFunction updatedWorld
    ```
 
 #### Acceptance Criteria:
-- [ ] Events are collected efficiently during frame
-- [ ] Batch processing handles large event counts
-- [ ] Memory usage is controlled and predictable
-- [ ] Event ordering is preserved
+- [ ] World state arrays are filled directly by native code
+- [ ] No event abstraction layer - pure data transformation
+- [ ] AI function receives complete world state snapshot
+- [ ] Memory layout is cache-friendly (Structure-of-Arrays)
 
 #### Test Plan:
 ```fsharp
 [<Test>]
-let ``Event batch processes all events`` () =
-    let events = generateTestEvents(1000)
-    let batch = { Events = events; EventCount = events.Length; FrameNumber = 100<frame> }
+let ``World state arrays are filled correctly`` () =
+    let worldState = generateTestWorldState()
     let mutable processedCount = 0
-    processEventBatch batch (fun _ -> processedCount <- processedCount + 1)
-    processedCount |> should equal 1000
+    let result = processWorldState worldState (fun _ -> processedCount <- processedCount + 1)
+    processedCount |> should equal worldState.UnitIds.Length
 ```
 
 ### Milestone 3.2: AI Interface with Batch Support
@@ -280,11 +286,10 @@ let ``Event batch processes all events`` () =
 **Goal**: Implement F# AI interface with batch operations
 
 #### Tasks:
-1. **Enhanced AI Interface**
+1. **F# AI Interface with Pure Functions**
    ```fsharp
    type IAI =
-       abstract member HandleEventBatch: EventBatch -> unit
-       abstract member PlanActionsFromWorldState: WorldState -> CommandBatch
+       abstract member ProcessWorldState: WorldState -> Command array
        abstract member UpdateStrategy: WorldState -> unit
    ```
 
@@ -295,22 +300,22 @@ let ``Event batch processes all events`` () =
        let mutable worldStateCache: WorldState option = None
        let mutable spatialGridCache: SpatialGrid option = None
        
-       member this.ProcessEventBatch(batch: EventBatch) = 
-           // Efficient batch processing implementation
+       member this.ProcessFrame(worldState: WorldState) = 
+           // Efficient data processing implementation
    ```
 
 3. **Performance Monitoring**
    ```fsharp
    type PerformanceMetrics = {
        FrameTime: TimeSpan
-       EventProcessingTime: TimeSpan
+       DataProcessingTime: TimeSpan
        CommandGenerationTime: TimeSpan
        MemoryUsage: int64
    }
    ```
 
 #### Acceptance Criteria:
-- [ ] AI processes event batches efficiently
+- [ ] AI processes world state data efficiently
 - [ ] World state caching works correctly
 - [ ] Performance metrics are captured
 - [ ] Strategy updates based on data analysis
@@ -318,11 +323,11 @@ let ``Event batch processes all events`` () =
 #### Test Plan:
 ```fsharp
 [<Test>]
-let ``AI processes event batch within time limit`` () =
+let ``AI processes world state within time limit`` () =
     let ai = TestAI()
-    let batch = generateLargeEventBatch()
+    let worldState = generateLargeWorldState()
     let stopwatch = Stopwatch.StartNew()
-    ai.HandleEventBatch(batch)
+    ai.ProcessWorldState(worldState)
     stopwatch.Stop()
     stopwatch.ElapsedMilliseconds |> should be (lessThan 16L) // 60 FPS target
 ```
@@ -416,8 +421,7 @@ let ``Command batch execution succeeds`` () =
 ```fsharp
 [<Test>]
 let ``Array pools reduce memory allocations`` () =
-    let (_, allocations1) = measureGCPressure (fun () -> 
-        for i in 1..1000 do Array.zeroCreate<int> 100 |> ignore)
+    let (_, allocations1) = measureGCPressure (fun () ->        for i in 1..1000 do Array.zeroCreate<int> 100 |> ignore)
     
     let (_, allocations2) = measureGCPressure (fun () ->
         for i in 1..1000 do 
@@ -429,59 +433,58 @@ let ``Array pools reduce memory allocations`` () =
 
 ---
 
-## Phase 5: C# Compatibility & Integration (Week 9-10)
+## Phase 5: BAR AI Implementation & Examples (Week 7-8)
 
-### Milestone 5.1: C# Wrapper Layer
+### Milestone 5.1: BAR-Specific AI Logic
 **Duration**: 4-5 days
-**Goal**: Provide seamless C# compatibility
+**Goal**: Create complete working BAR AI using the pure F# wrapper
 
 #### Tasks:
-1. **C# Interface Adapters**
-   ```csharp
-   public interface ICSharpAI
-   {
-       void OnEventBatch(GameEvent[] events);
-       Command[] PlanActionsFromWorldState(WorldState worldState);
-   }
+1. **BAR Unit Analysis Functions**
+   ```fsharp
+   module BARUnitAnalyzer =
+       let classifyUnit (unit: Unit) (unitDef: UnitDefinition) : BARUnitClass =
+           match unitDef.Categories with
+           | cats when Array.contains "COMMANDER" cats -> Commander
+           | cats when Array.contains "BUILDER" cats -> Builder
+           | cats when Array.contains "FACTORY" cats -> Factory
+           | _ -> Generic
    ```
 
-2. **Type Converters**
-   ```csharp
-   public static class TypeConverters
-   {
-       public static FSharpCommand ToFSharpCommand(CSharpCommand command);
-       public static CSharpUnitInfo FromFSharpUnit(UnitInfo unit);
-   }
+2. **Economic Strategy Functions**
+   ```fsharp
+   module BAREconomy =
+       let planEconomicBuilding (world: WorldState) : Command[] =
+           let metalRatio = world.Resources.Metal / world.Resources.MetalStorage
+           if metalRatio < 0.2f<ratio> then
+               buildMetalExtractors world
+           else
+               buildEnergyProducers world
    ```
 
-3. **C# Example Implementation**
-   ```csharp
-   public class ExampleCSharpAI : BaseCSharpAI
-   {
-       protected override Command[] PlanActionsFromWorldState(WorldState worldState)
-       {
-           // Use F# optimizations from C#
-           return FSharpAIHelpers.GenerateOptimalCommands(worldState);
-       }
-   }
+3. **Complete BAR AI Example**
+   ```fsharp
+   let barAIFunction (world: WorldState) : Command[] =
+       [|
+           yield! BAREconomy.planEconomicBuilding world
+           yield! BARMilitary.planUnitProduction world
+           yield! BARMilitary.planCombatActions world
+       |]
    ```
 
 #### Acceptance Criteria:
-- [ ] C# developers can use the wrapper easily
-- [ ] Type conversions are automatic and efficient
-- [ ] C# code benefits from F# optimizations
-- [ ] IntelliSense and tooling work properly
+- [ ] Complete working BAR AI that can play games
+- [ ] AI demonstrates economic and military strategies
+- [ ] Performance meets 30Hz frame rate requirements
+- [ ] All BAR unit types are properly handled
 
 #### Test Plan:
-```csharp
-[Test]
-public void CSharpAI_CanProcessWorldState()
-{
-    var ai = new ExampleCSharpAI();
-    var worldState = TestHelper.CreateTestWorldState();
-    var commands = ai.PlanActionsFromWorldState(worldState);
-    Assert.That(commands, Is.Not.Empty);
-}
+```fsharp
+[<Test>]
+let ``BAR AI can manage economy effectively`` () =
+    let world = TestHelper.createTestWorldState()
+    let commands = barAIFunction world
+    commands |> should contain (fun c -> match c with Build _ -> true | _ -> false)
 ```
 
 ### Milestone 5.2: Integration Testing
@@ -494,8 +497,8 @@ public void CSharpAI_CanProcessWorldState()
    // Create minimal Spring AI interface mock
    class MockSpringAI : public ISpringAI {
    public:
-       virtual int HandleEvent(int topic, const void* data) override;
-       virtual int ExecuteCommand(int commandId, void* params) override;
+       virtual int FillUnitArray(Unit* units, int maxCount) override;
+       virtual int FillResourceState(ResourceState* resources) override;
    };
    ```
 
@@ -593,7 +596,7 @@ public void CSharpAI_CanProcessWorldState()
    ```markdown
    # API Documentation
    - F# Core API reference
-   - C# compatibility guide
+   - Data-oriented patterns guide
    - Performance optimization guide
    - Integration examples
    ```
@@ -640,11 +643,11 @@ type IntegrationTests() =
 
 ### Performance Tests (Continuous)
 ```fsharp
-// Benchmark tests using BenchmarkDotNet
+// BenchmarkDotNet tests for performance validation
 [<MemoryDiagnoser>]
 type PerformanceBenchmarks() =
     [<Benchmark>]
-    member this.ProcessEventBatch() = ...
+    member this.ProcessWorldState() = ...
     
     [<Benchmark>]
     member this.GenerateCommands() = ...
@@ -655,7 +658,7 @@ type PerformanceBenchmarks() =
 ## Success Metrics
 
 ### Performance Targets
-- **Event Processing**: 3-5x faster than traditional callbacks
+- **Data Processing**: 3-5x faster than traditional object-oriented callbacks
 - **Memory Usage**: <50% of baseline OOP implementation
 - **Frame Processing**: <5ms for 1000-unit scenarios
 - **Spatial Queries**: <1ms for radius searches
@@ -663,7 +666,7 @@ type PerformanceBenchmarks() =
 ### Quality Targets
 - **Test Coverage**: >85% for core functionality
 - **Documentation**: Complete API docs + tutorials
-- **Compatibility**: Full C# interop with no performance loss
+- **Performance**: Consistent sub-frame processing times
 - **Stability**: No crashes in 24-hour stress testing
 
 ### Delivery Targets
