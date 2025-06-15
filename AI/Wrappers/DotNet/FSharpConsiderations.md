@@ -4,6 +4,64 @@
 
 The .NET AI wrapper is designed to be language-agnostic within the .NET ecosystem. F# developers can leverage the wrapper to create sophisticated AI implementations using F#'s functional programming paradigms, pattern matching, and type safety features. This document outlines considerations and best practices for consuming the .NET wrapper from F#.
 
+## F#-First Design Philosophy
+
+### Why Design F#-First?
+
+F# provides superior abstractions for game AI development:
+- **Immutable data structures** prevent race conditions in concurrent scenarios
+- **Discriminated unions** model game states more precisely than inheritance hierarchies
+- **Pattern matching** creates more readable and maintainable decision trees
+- **Option types** eliminate null reference exceptions
+- **Units of measure** prevent unit conversion bugs
+- **Computation expressions** provide clean error handling and async workflows
+
+### F#-First Architecture
+
+Instead of retrofitting F# onto C# designs, we can design the core API in F# and provide C# compatibility layers:
+
+```fsharp
+// Core F# API Design
+namespace SpringAI.Core
+
+[<Measure>] type metal
+[<Measure>] type energy  
+[<Measure>] type frame
+[<Measure>] type elmo
+
+// Primary F# event types
+type GameEvent =
+    | GameStarted of aiId: int * savedGame: bool
+    | FrameUpdate of frame: int<frame>
+    | UnitCreated of unitId: int * builderId: int * frame: int<frame>
+    | UnitDamaged of unitId: int * attackerId: int * damage: float32 * frame: int<frame>
+    | UnitDestroyed of unitId: int * attackerId: int * frame: int<frame>
+    | GameEnded of reason: int
+
+// Core resource state with units of measure
+type ResourceState = {
+    Metal: float32<metal>
+    Energy: float32<energy>
+    MetalIncome: float32<metal>
+    EnergyIncome: float32<energy>
+    CurrentFrame: int<frame>
+}
+
+// Primary AI interface designed for F#
+type IGameContext =
+    abstract member GetResources: unit -> ResourceState
+    abstract member GetUnit: int -> UnitInfo option
+    abstract member GetFriendlyUnits: unit -> UnitInfo list
+    abstract member ExecuteCommand: Command -> Result<string, string>
+
+// F# command types
+type Command =
+    | Build of builderId: int * unitDefName: string * position: Vector3
+    | Move of unitId: int * destination: Vector3
+    | Attack of attackerId: int * targetId: int
+    | Stop of unitId: int
+```
+
 ## F# Advantages for AI Development
 
 ### Functional Programming Benefits
@@ -316,94 +374,232 @@ type ExampleFSharpAI() =
         resources
 ```
 
-### 4. Advanced F# Patterns
-
-#### Computation Expressions for AI Planning
+#### F#-First AI Interface
 
 ```fsharp
-// Custom computation expression for AI planning
-type AIBuilder() =
-    member this.Bind(resource, f) = 
-        match resource with
-        | Some value -> f value
-        | None -> []
-    
-    member this.Return(value) = [value]
-    
-    member this.Zero() = []
+// Primary AI interface optimized for F# patterns
+type IAI =
+    abstract member HandleEvent: GameEvent -> unit
+    abstract member GetNextCommands: ResourceState -> Command list
+    abstract member Initialize: IGameContext -> unit
+    abstract member Shutdown: int -> unit
 
-let ai = AIBuilder()
-
-// Usage in AI decision making
-let planBuildOrder (callback: GameCallback) = ai {
-    let! metal = GameCallback.tryGetMetal callback
-    let! energy = GameCallback.tryGetEnergy callback
+// Example F# AI implementation
+type FSharpAI(context: IGameContext) =
+    let mutable gameState = {
+        Metal = 0.0f<metal>
+        Energy = 0.0f<energy>
+        MetalIncome = 0.0f<metal>
+        EnergyIncome = 0.0f<energy>
+        CurrentFrame = 0<frame>
+    }
     
-    if metal > 1000.0f && energy > 2000.0f then
-        return BuildFactory("armvp")
-    else
-        return BuildEconomy("armsolar")
+    interface IAI with
+        member this.HandleEvent event =
+            match event with
+            | GameStarted(aiId, savedGame) ->
+                printfn "F# AI %d started (saved: %b)" aiId savedGame
+                
+            | FrameUpdate frame ->
+                gameState <- context.GetResources()
+                this.ProcessFrame(frame)
+                
+            | UnitCreated(unitId, builderId, frame) ->
+                this.HandleUnitCreated(unitId, builderId)
+                
+            | UnitDamaged(unitId, attackerId, damage, frame) ->
+                this.HandleCombat(unitId, attackerId, damage)
+                
+            | UnitDestroyed(unitId, attackerId, frame) ->
+                this.HandleUnitLoss(unitId, attackerId)
+                
+            | GameEnded reason ->
+                printfn "Game ended with reason: %d" reason
+        
+        member this.GetNextCommands resources =
+            this.PlanActions(resources)
+        
+        member this.Initialize context =
+            printfn "F# AI initialized"
+        
+        member this.Shutdown reason =
+            printfn "F# AI shutting down: %d" reason
+    
+    member private this.ProcessFrame(frame: int<frame>) =
+        // F# frame processing logic
+        ()
+    
+    member private this.PlanActions(resources: ResourceState) : Command list =
+        match resources with
+        | { Metal = m; Energy = e } when m > 1000.0f<metal> && e > 2000.0f<energy> ->
+            [ Build(1, "armvp", Vector3.Zero) ]
+        | { Metal = m } when m < 500.0f<metal> ->
+            [ Build(1, "armmex", Vector3.Zero) ]
+        | _ -> 
+            []
+```
+
+### C# Compatibility Layer
+
+The C# API becomes a compatibility layer that wraps the F# core:
+
+```csharp
+// C# wrapper around F# types
+using SpringAI.Core;
+using Microsoft.FSharp.Core;
+
+namespace SpringAI.CSharp
+{
+    // C# event wrapper
+    public abstract class AIEvent
+    {
+        public int Frame { get; set; }
+        public abstract GameEvent ToFSharpEvent();
+    }
+    
+    public class UnitCreatedEvent : AIEvent
+    {
+        public int UnitId { get; set; }
+        public int BuilderId { get; set; }
+        
+        public override GameEvent ToFSharpEvent() =>
+            GameEvent.NewUnitCreated(UnitId, BuilderId, Frame);
+    }
+    
+    // C# AI interface that delegates to F#
+    public interface ICSharpAI
+    {
+        void OnInit(int aiId, bool savedGame);
+        void OnUpdate(int frame);
+        void OnUnitCreated(int unitId, int builderId);
+        // ... other methods
+    }
+    
+    // Bridge between C# and F# APIs
+    public class CSharpAIAdapter : ICSharpAI
+    {
+        private readonly IAI _fsharpAI;
+        private readonly IGameContext _context;
+        
+        public CSharpAIAdapter(IAI fsharpAI, IGameContext context)
+        {
+            _fsharpAI = fsharpAI;
+            _context = context;
+        }
+        
+        public void OnInit(int aiId, bool savedGame)
+        {
+            var fsharpEvent = GameEvent.NewGameStarted(aiId, savedGame);
+            _fsharpAI.HandleEvent(fsharpEvent);
+        }
+        
+        public void OnUpdate(int frame)
+        {
+            var fsharpEvent = GameEvent.NewFrameUpdate(frame);
+            _fsharpAI.HandleEvent(fsharpEvent);
+            
+            // Execute planned commands
+            var resources = _context.GetResources();
+            var commands = _fsharpAI.GetNextCommands(resources);
+            foreach (var command in commands)
+            {
+                _context.ExecuteCommand(command);
+            }
+        }
+        
+        public void OnUnitCreated(int unitId, int builderId)
+        {
+            var fsharpEvent = GameEvent.NewUnitCreated(unitId, builderId, 0);
+            _fsharpAI.HandleEvent(fsharpEvent);
+        }
+    }
 }
 ```
 
-#### Agent-Based Architecture
+### Project Structure for F#-First Design
 
-```fsharp
-// F# Agent (MailboxProcessor) for concurrent AI processing
-type AIAgent(callback: GameCallback) =
-    
-    type AgentMessage =
-        | ProcessEvent of BAREvent
-        | GetState of AsyncReplyChannel<GameState>
-        | UpdateStrategy of Strategy
-    
-    let agent = MailboxProcessor<AgentMessage>.Start(fun inbox ->
-        let rec loop state = async {
-            let! msg = inbox.Receive()
-            match msg with
-            | ProcessEvent event ->
-                let newState = processEvent state event
-                return! loop newState
-                
-            | GetState reply ->
-                reply.Reply(state)
-                return! loop state
-                
-            | UpdateStrategy strategy ->
-                let newState = { state with Strategy = strategy }
-                return! loop newState
-        }
-        loop initialState
-    )
-    
-    member this.PostEvent event = agent.Post(ProcessEvent event)
-    member this.GetStateAsync() = agent.PostAndAsyncReply(GetState)
+```
+SpringAI.FSharp/              # Core F# library
+├── SpringAI.FSharp.fsproj
+├── Core/
+│   ├── Types.fs              # Core F# types (events, commands, etc.)
+│   ├── GameContext.fs        # F# game interface
+│   ├── AI.fs                 # F# AI interface
+│   └── Commands.fs           # F# command types
+├── Interop/
+│   ├── NativeInterop.fs      # P/Invoke to native layer
+│   └── Marshalling.fs        # Type conversions
+└── Extensions/
+    ├── ActivePatterns.fs     # F# active patterns
+    ├── ComputationExpressions.fs
+    └── DomainSpecificLanguage.fs
+
+SpringAI.CSharp/              # C# compatibility layer
+├── SpringAI.CSharp.csproj
+├── Events/
+│   └── CSharpEvents.cs       # C# event wrappers
+├── AI/
+│   ├── CSharpAI.cs          # C# AI interface
+│   └── AIAdapter.cs         # Bridge to F# core
+└── Compatibility/
+    └── TypeConverters.cs     # Convert between C# and F# types
+
+SpringAI.Native/              # Native C++ interop
+├── SpringAI.Native.vcxproj
+└── src/
+    ├── FSharpInterop.cpp     # Optimized for F# types
+    └── Exports.cpp           # C exports
 ```
 
-### 5. Type Provider Considerations
+### Benefits of F#-First Design
 
-#### Future: F# Type Provider for Game Data
+1. **Type Safety**: F# discriminated unions are compile-time checked, eliminating runtime errors
+2. **Performance**: No reflection needed - pattern matching compiles to efficient switch statements
+3. **Immutability**: Default immutable types prevent threading issues
+4. **Expressiveness**: Domain modeling with DUs is more precise than inheritance
+5. **Error Handling**: Built-in Result/Option types eliminate null reference exceptions
+6. **Concurrency**: F# async and agents provide better concurrency primitives
 
-```fsharp
-// Conceptual F# type provider for BAR game data
-// This would generate types at compile time from BAR's unit definitions
+### C# Consumption of F#-First API
 
-#r "SpringAI.TypeProvider.dll"
+C# developers can still use the wrapper, but through F#-optimized types:
 
-open SpringAI.TypeProviders
+```csharp
+// C# using F# types
+using SpringAI.Core;
+using Microsoft.FSharp.Collections;
 
-type BAR = BARTypeProvider<"path/to/BAR.sdd">
-
-// Strongly typed access to BAR units
-let armCommander = BAR.Units.ARM.armcom
-let corCommander = BAR.Units.COR.corcom
-
-// Type-safe build orders
-let armBuildOrder = [
-    BAR.Units.ARM.armsolar
-    BAR.Units.ARM.armkbot
-    BAR.Units.ARM.armvp
-]
+public class CSharpBARAI : ICSharpAI
+{
+    private readonly IGameContext _context;
+    
+    public CSharpBARAI(IGameContext context)
+    {
+        _context = context;
+    }
+    
+    public void OnUpdate(int frame)
+    {
+        var resources = _context.GetResources();
+        
+        // C# can still work with F# types
+        if (resources.Metal.Value > 1000 && resources.Energy.Value > 2000)
+        {
+            var buildCommand = Command.NewBuild(1, "armvp", Vector3.Zero);
+            var result = _context.ExecuteCommand(buildCommand);
+            
+            // Handle F# Result type in C#
+            if (result.IsOk)
+            {
+                Console.WriteLine($"Success: {result.ResultValue}");
+            }
+            else
+            {
+                Console.WriteLine($"Error: {result.ErrorValue}");
+            }
+        }
+    }
+}
 ```
 
 ## Implementation Guidelines
@@ -443,7 +639,7 @@ public interface IGameCallback
 
 ```fsharp
 // F# async consumption
-let processUnitsAsync (callback: IGameCallback) = async {
+let processUnitsAsync (callback: GameCallback) = async {
     let! units = callback.GetUnitsAsync() |> Async.AwaitTask
     return units |> Seq.filter isValidTarget |> List.ofSeq
 }
@@ -491,7 +687,7 @@ let modOptions = callback.GetModOptions() |> Map.ofSeq
 
 ```fsharp
 // Use struct tuples and value types when possible
-let analyzeUnit (unitInfo: struct(int * float32 * Vector3)) =
+type analyzeUnit (unitInfo: struct(int * float32 * Vector3)) =
     let (unitId, health, position) = unitInfo
     // Process without heap allocation
     ()
@@ -790,7 +986,7 @@ let rec executeBuildOrder callback buildOrder =
     ()
 ```
 
-### 8. F# Lens Library Integration for Immutable Updates
+### 8. F# Lens Library Integration for Deep Updates
 
 ```fsharp
 // Using F# lens libraries for deep immutable updates
@@ -924,6 +1120,22 @@ let convertEvent (event: AIEvent) =
     | EventType.UnitCreated -> // Fast enum comparison
         let e = event :?> UnitCreatedEvent
         UnitCreated(e.Frame, e.UnitId, e.BuilderId)
+    | EventType.UnitDamaged ->
+        let e = event :?> UnitDamagedEvent
+        UnitDamaged(e.Frame, e.UnitId, e.AttackerId, e.Damage)
+    | EventType.UnitDestroyed ->
+        let e = event :?> UnitDestroyedEvent
+        UnitDestroyed(e.Frame, e.UnitId, e.AttackerId)
+    | EventType.GameUpdate ->
+        let e = event :?> UpdateEvent
+        GameUpdate(e.Frame)
+    | EventType.GameInit ->
+        let e = event :?> InitEvent
+        GameInit(e.SkirmishAIId, e.SavedGame)
+    | EventType.GameRelease ->
+        let e = event :?> ReleaseEvent
+        GameRelease(e.Reason)
+    | _ -> failwith $"Unknown event type: {event.EventType}"
 ```
 
 ### ✅ DO: Type Extensions

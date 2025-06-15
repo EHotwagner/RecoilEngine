@@ -1,6 +1,241 @@
-# .NET AI Wrapper for RecoilEngine
+# .NET AI Wrapper for RecoilEngine/Spring
 
-This directory contains a .NET wrapper for creating AI implementations for the RecoilEngine (Spring) game engine.
+**F#-First AI Development Platform for Beyond All Reason (BAR)**
+
+This wrapper provides a modern, type-safe .NET interface for developing AI for the RecoilEngine (formerly Spring Engine), with a focus on the Beyond All Reason (BAR) real-time strategy game.
+
+## 🎯 Key Features
+
+- **F#-First Design**: Leverages F#'s superior type system as the primary API
+- **C# Compatibility**: Full compatibility layer for C# developers
+- **Type Safety**: Units of measure prevent resource calculation bugs
+- **Null Safety**: F# options eliminate null reference exceptions
+- **Pattern Matching**: Exhaustive matching ensures all game states are handled
+- **Computation Expressions**: Clean error handling and async workflows
+- **BAR Integration**: Optimized for Beyond All Reason gameplay and data structures
+
+## 🏗️ Architecture
+
+```mermaid
+graph TB
+    subgraph "F# Core (Primary API)"
+        A[Discriminated Unions]
+        B[Units of Measure]
+        C[Computation Expressions]
+        D[Pattern Matching]
+    end
+    
+    subgraph "C# Compatibility Layer"
+        E[Traditional OOP APIs]
+        F[Event Adapters]
+        G[Type Converters]
+    end
+    
+    subgraph "Native Interop"
+        H[C++ AI Interface]
+        I[P/Invoke Layer]
+    end
+    
+    A --> E
+    B --> F
+    C --> G
+    D --> F
+    H --> I
+    I --> A
+    A --> "F# AI Applications"
+    E --> "C# AI Applications"
+```
+
+### Why F#-First?
+
+F# provides superior abstractions for game AI development:
+
+- **Immutable data structures** prevent race conditions
+- **Discriminated unions** model game states more precisely than inheritance
+- **Units of measure** prevent unit conversion bugs (metal vs energy)
+- **Option types** eliminate null reference exceptions
+- **Pattern matching** creates maintainable decision trees
+- **Computation expressions** provide clean error handling
+
+**C# developers still get full support** through the compatibility layer, but benefit from F#'s type safety automatically.
+
+## 🚀 Quick Start
+
+### F# Development (Recommended)
+
+```fsharp
+open SpringAI.Core
+
+type MyAI(context: IGameContext) =
+    inherit BaseFSharpAI(context)
+    
+    override this.CreateBuildPlan resourceState =
+        aiDecision {
+            let! builders = this.GetAvailableBuilders()
+            match resourceState with
+            | ResourceRich when List.length builders > 0 ->
+                let builder = builders.[0]
+                let! location = this.FindBuildLocation(builder.Position)
+                return [{ Action = Build(builder.Id, "armlab", location)
+                         Priority = 8
+                         Reason = "Tech advancement"
+                         EstimatedDuration = Some 300<frame> }]
+            | _ -> return []
+        }
+```
+
+### C# Development (Compatibility)
+
+```csharp
+using SpringAI.CSharp.AI;
+
+public class MyAI : BaseCSharpAI
+{
+    protected override void ProcessUpdate(int frame, ResourceState resources, Strategy strategy)
+    {
+        var builders = GetFriendlyUnits().Where(u => u.IsBuilder).ToList();
+        
+        foreach (var builder in builders.Take(1))
+        {
+            if (resources.CanAfford(100, 50)) // F# type safety prevents bugs
+            {
+                var command = new BuildCommand(builder.Id, "armlab", builder.Position);
+                ExecuteCommand(TypeConverters.ToFSCommand(command)); // F# validation
+            }
+        }
+    }
+}
+```
+
+## 📁 Project Structure
+
+```
+src/
+├── fsharp-core/           # Primary F# API
+│   ├── Types.fs           # Discriminated unions, records, units of measure
+│   ├── GameContext.fs     # F# interfaces and context
+│   ├── AI.fs              # F# AI interface with computation expressions
+│   └── ActivePatterns.fs  # Pattern matching helpers
+│
+├── csharp-compat/         # C# compatibility layer
+│   ├── AI/               # C# AI interfaces and adapters
+│   ├── Commands/         # C# command classes
+│   ├── Compatibility/    # F#↔C# type converters
+│   └── Events/           # C# event classes
+│
+├── native/               # Native C++ interop
+└── managed/              # Legacy/transition code (being phased out)
+
+examples/
+├── FSharp/               # F# example AIs
+└── CSharp/               # C# example AIs using F# core
+
+docs/
+├── Architecture.md       # Detailed architecture documentation
+├── BarIntegration.md     # BAR-specific integration details
+├── FSharpConsiderations.md # F# language design considerations
+└── F#-First-Architecture.md # Complete F#-first design guide
+```
+
+## 🔧 Building
+
+### Prerequisites
+
+- .NET 8.0 SDK or later
+- Visual Studio 2022, VS Code, or JetBrains Rider
+- CMake 3.15+ (for native components)
+- C++17 compatible compiler
+
+### Build Commands
+
+```bash
+# Build F# core (primary API)
+cd src/fsharp-core
+dotnet build
+
+# Build C# compatibility layer
+cd src/csharp-compat
+dotnet build
+
+# Build native interop layer
+mkdir build && cd build
+cmake ..
+cmake --build .
+```
+
+## 📚 Documentation
+
+- **[F#-First Architecture](F%23-First-Architecture.md)** - Complete design philosophy and implementation
+- **[Architecture Overview](Architecture.md)** - System architecture and data flow
+- **[BAR Integration](BarIntegration.md)** - BAR-specific features and data access
+- **[F# Considerations](FSharpConsiderations.md)** - F# language design decisions
+
+## 🎮 BAR-Specific Features
+
+### Type-Safe Resource Management
+
+```fsharp
+[<Measure>] type metal
+[<Measure>] type energy
+
+let buildLab (resources: ResourceState) =
+    if resources.Metal >= 100.0f<metal> && resources.Energy >= 50.0f<energy> then
+        Some (Build(builderId, "armlab", position))
+    else None
+```
+
+### BAR Faction Support
+
+```fsharp
+type BARFaction = ARM | COR | Unknown
+
+let selectUnits faction =
+    match faction with
+    | ARM -> ["armcom"; "armlab"; "armvp"; "armstump"]
+    | COR -> ["corcom"; "corlab"; "corvp"; "corraid"]
+    | Unknown -> []
+```
+
+### BAR Game Phase Detection
+
+```fsharp
+let determinePhase frame resources =
+    match frame, resources with
+    | f, _ when f < 1800<frame> -> EarlyGame f
+    | f, { Metal = m; Energy = e } when f < 7200<frame> && m > 500.0f<metal> -> MidGame f
+    | f, _ -> LateGame f
+```
+
+## 🤝 Contributing
+
+1. **F# developers**: Contribute to the core API in `src/fsharp-core/`
+2. **C# developers**: Improve compatibility layer in `src/csharp-compat/`
+3. **Game experts**: Enhance BAR-specific features and examples
+4. **Documentation**: Help improve guides and examples
+
+### Development Workflow
+
+1. Fork the repository
+2. Create a feature branch
+3. Implement changes (F# core first, then C# compatibility)
+4. Add tests and examples
+5. Update documentation
+6. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the GPL v2+ - see the [LICENSE](../../LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- **RecoilEngine Team** - For the excellent RTS engine
+- **Beyond All Reason Community** - For the amazing game and mod ecosystem
+- **F# Community** - For the language that makes this wrapper possible
+- **Spring Engine Contributors** - For the foundation this builds upon
+
+---
+
+**Ready to build the next generation of RTS AI?** Start with F# for maximum power, or use C# for familiarity - either way, you get the benefits of F#'s superior type system.
 
 ## Overview
 
