@@ -217,102 +217,103 @@ typedef struct {
 } SAIUnitDef;
 ```
 
-### .NET Wrapper Data Access Patterns
+### F# Wrapper Data Access Patterns
 
-#### 1. P/Invoke Layer (Interop/NativeMethods.cs)
+#### 1. P/Invoke Layer (Interop.fs)
 
 **String Handling**: BAR uses UTF-8 strings passed via C interface
-```csharp
-[DllImport("SpringAIWrapper", CallingConvention = CallingConvention.Cdecl)]
-private static extern IntPtr GetUnitDefName(int unitDefId);
+```fsharp
+open System
+open System.Runtime.InteropServices
 
-[DllImport("SpringAIWrapper", CallingConvention = CallingConvention.Cdecl)]
-private static extern IntPtr GetUnitDefCategories(int unitDefId, out int count);
+[<DllImport("SpringAIWrapper", CallingConvention = CallingConvention.Cdecl)>]
+extern nativeint GetUnitDefName(int unitDefId)
+
+[<DllImport("SpringAIWrapper", CallingConvention = CallingConvention.Cdecl)>]
+extern nativeint GetUnitDefCategories(int unitDefId, int& count)
 
 // String marshaling with proper UTF-8 handling
-public static string GetUnitName(int unitDefId)
-{
-    IntPtr ptr = GetUnitDefName(unitDefId);
-    return ptr != IntPtr.Zero ? Marshal.PtrToStringUTF8(ptr) : string.Empty;
-}
+let getUnitName (unitDefId: int) : string =
+    let ptr = GetUnitDefName(unitDefId)
+    if ptr <> nativeint 0 then
+        Marshal.PtrToStringUTF8(ptr)
+    else
+        String.Empty
 ```
 
-#### 2. Typed .NET Objects (Auto-Generated from Engine Data)
+#### 2. F# Record Types (Data-Oriented Structures)
 
-**No Manual String Parsing**: Categories are pre-processed by engine
-```csharp
-public class UnitDefinition
-{
-    public int Id { get; internal set; }
-    public string Name { get; internal set; }           // "ARM Commander"
-    public string DefName { get; internal set; }        // "armcom"
-    public float MetalCost { get; internal set; }       // 2500.0f
-    public float EnergyCost { get; internal set; }      // 25000.0f
-    public float MaxHealth { get; internal set; }       // 3000.0f
+**Immutable Records**: Categories are pre-processed by engine
+```fsharp
+type UnitDefinition = {
+    Id: int
+    Name: string                    // "ARM Commander"
+    DefName: string                 // "armcom"
+    MetalCost: float32<metal>       // 2500.0f with units of measure
+    EnergyCost: float32<energy>     // 25000.0f with units of measure
+    MaxHealth: float32<health>      // 3000.0f with units of measure
     
-    // Categories converted from Lua string to .NET collection
-    public IReadOnlyList<string> Categories { get; internal set; }  
-    // ["ALL", "COMMANDER", "MOBILE", "WEAPON", "SURFACE"]
+    // Categories as immutable array
+    Categories: string[]            // [|"ALL"; "COMMANDER"; "MOBILE"; "WEAPON"; "SURFACE"|]
     
-    // BAR-specific faction detection (derived from defName)
-    public BARFaction Faction => DefName.StartsWith("arm") ? BARFaction.ARM 
-                               : DefName.StartsWith("cor") ? BARFaction.COR 
-                               : BARFaction.Unknown;
+    // BAR-specific faction detection (computed property)
+    Faction: BARFaction
 }
+
+and BARFaction = ARM | COR | Unknown
+
+// Pure function for faction detection
+let getFaction (defName: string) =
+    if defName.StartsWith("arm") then ARM
+    elif defName.StartsWith("cor") then COR
+    else Unknown
 ```
 
 #### 3. BAR-Specific Data Enrichment
 
-**Runtime Enhancement**: .NET wrapper adds BAR-specific intelligence
-```csharp
-public static class BARExtensions
-{
+**Pure Functions**: F# wrapper adds BAR-specific intelligence through pure functions
+```fsharp
+module BARExtensions =
     // BAR-specific unit classification
-    public static BARUnitType GetBARUnitType(this UnitDefinition unitDef)
-    {
-        var categories = unitDef.Categories;
-        
-        if (categories.Contains("COMMANDER")) return BARUnitType.Commander;
-        if (categories.Contains("BUILDER")) return BARUnitType.Builder;
-        if (categories.Contains("FACTORY")) return BARUnitType.Factory;
-        if (categories.Contains("WEAPON") && categories.Contains("MOBILE")) 
-            return BARUnitType.MobileWeapon;
-        if (categories.Contains("ENERGY")) return BARUnitType.EnergyProducer;
-        if (categories.Contains("METAL")) return BARUnitType.MetalExtractor;
-        
-        return BARUnitType.Unknown;
-    }
+    let getBARUnitType (unitDef: UnitDefinition) : BARUnitType =
+        var categories = unitDef.Categories;        
+        match unitDef.Categories with
+        | cats when Array.contains "COMMANDER" cats -> BARUnitType.Commander
+        | cats when Array.contains "BUILDER" cats -> BARUnitType.Builder
+        | cats when Array.contains "FACTORY" cats -> BARUnitType.Factory
+        | cats when Array.contains "WEAPON" cats && Array.contains "MOBILE" cats -> 
+            BARUnitType.MobileWeapon
+        | cats when Array.contains "ENERGY" cats -> BARUnitType.EnergyProducer
+        | cats when Array.contains "METAL" cats -> BARUnitType.MetalExtractor
+        | _ -> BARUnitType.Unknown
     
-    // BAR build tree analysis
-    public static IEnumerable<string> GetBuildOptions(this UnitDefinition unitDef, IGameCallback callback)
-    {
-        // Query engine for build options (cached for performance)
-        return callback.GetUnitDefBuildOptions(unitDef.Id);
-    }
-}
+    // BAR build tree analysis using pure functions
+    let getBuildOptions (unitDef: UnitDefinition) (worldState: WorldState) : string[] =
+        // Query world state for build options (immutable lookup)
+        worldState.UnitDefBuildOptions.[unitDef.Id]
 ```
 
 ### Data Access Timing and Performance
 
 #### 1. Initialization Phase (Game Start)
-```csharp
-public override void OnInit(int skirmishAIId, bool savedGame)
-{
-    // Pre-cache all unit definitions (expensive, done once)
-    _unitDefinitions = new Dictionary<int, UnitDefinition>();
+```fsharp
+let initializeAI (skirmishAIId: int) (savedGame: bool) =
+{    // Pre-cache all unit definitions in immutable array (expensive, done once)
+    let unitDefCount = getUnitDefCount()
     
-    int unitDefCount = Callback.GetUnitDefCount();
-    for (int i = 0; i < unitDefCount; i++)
-    {
-        var unitDef = Callback.GetUnitDef(i);
-        _unitDefinitions[unitDef.Id] = unitDef;
+    let unitDefinitions = 
+        [| 0 .. unitDefCount - 1 |]
+        |> Array.map getUnitDef
         
-        // BAR-specific preprocessing
-        if (unitDef.GetBARUnitType() == BARUnitType.Factory)
-        {
-            _factoryTypes.Add(unitDef.DefName, unitDef.GetBuildOptions(Callback));
-        }
-    }
+    // BAR-specific preprocessing using pure functions
+    let factoryTypes = 
+        unitDefinitions
+        |> Array.filter (fun unitDef -> getBARUnitType unitDef = BARUnitType.Factory)
+        |> Array.map (fun unitDef -> unitDef.DefName, getBuildOptions unitDef)
+        |> Map.ofArray
+        
+    // Create initial world state
+    { UnitDefinitions = unitDefinitions; FactoryTypes = factoryTypes }
 }
 ```
 
@@ -325,21 +326,16 @@ public override void OnUpdate(int frame)
     foreach (var unit in myUnits)
     {
         // O(1) lookup using cached definitions
-        var unitDef = _unitDefinitions[unit.DefId];
-        
-        // BAR-specific decision making using typed data
-        switch (unitDef.GetBARUnitType())
-        {
-            case BARUnitType.Commander:
-                HandleCommander(unit, unitDef);
-                break;
-            case BARUnitType.Factory:
-                ManageProduction(unit, unitDef);
-                break;
-            // ... other cases
-        }
-    }
-}
+        var unitDef = _unitDefinitions[unit.DefId];        
+        // BAR-specific decision making using pattern matching
+        match getBARUnitType unitDef with
+        | BARUnitType.Commander ->
+            handleCommander unit unitDef worldState
+        | BARUnitType.Factory ->
+            manageProduction unit unitDef worldState
+        | _ -> 
+            [||] // No commands for other unit types
+    )
 ```
 
 ### BAR-Specific Information Types
@@ -370,51 +366,40 @@ public class SafeGameDataAccess
 {
     public static UnitDefinition GetValidatedUnitDef(IGameCallback callback, int unitDefId)
     {
-        try
-        {
-            var unitDef = callback.GetUnitDef(unitDefId);
-            if (unitDef == null)
-                throw new InvalidDataException($"Unit definition {unitDefId} not found");
-                
-            if (string.IsNullOrEmpty(unitDef.Name))
-                throw new InvalidDataException($"Unit definition {unitDefId} has no name");
-                
-            return unitDef;
-        }
-        catch (Exception ex)
-        {
-            Logger.LogWarning($"Failed to get unit definition {unitDefId}: {ex.Message}");
-            return CreateFallbackUnitDef(unitDefId);
-        }
-    }
-}
+        try        match tryGetUnitDef unitDefId with
+        | Some unitDef when not (String.IsNullOrEmpty unitDef.Name) ->
+            unitDef
+        | Some _ ->
+            failwithf "Unit definition %d has no name" unitDefId
+        | None ->
+            failwithf "Unit definition %d not found" unitDefId
+    with
+    | ex ->
+        logWarning (sprintf "Failed to get unit definition %d: %s" unitDefId ex.Message)
+        createFallbackUnitDef unitDefId
 ```
 
 #### 2. BAR Version Compatibility
-```csharp
-public class BARVersionDetection
-{
-    public static BARVersion DetectBARVersion(IGameCallback callback)
-    {
-        var modInfo = callback.GetModInfo();
-        
-        // Parse version from mod information
-        if (modInfo.Name.Contains("Beyond All Reason"))
-        {
-            var versionMatch = Regex.Match(modInfo.Version, @"(\d+)\.(\d+)\.(\d+)");
-            if (versionMatch.Success)
-            {
-                return new BARVersion(
-                    int.Parse(versionMatch.Groups[1].Value),
-                    int.Parse(versionMatch.Groups[2].Value),
-                    int.Parse(versionMatch.Groups[3].Value)
-                );
-            }
-        }
-        
-        throw new UnsupportedModException("This AI requires Beyond All Reason");
-    }
-}
+```fsharp
+module BARVersionDetection =
+    
+    type BARVersion = { Major: int; Minor: int; Patch: int }
+    
+    let detectBARVersion (modInfo: ModInfo) : Result<BARVersion, string> =
+        if modInfo.Name.Contains("Beyond All Reason") then
+            let versionPattern = @"(\d+)\.(\d+)\.(\d+)"
+            let versionMatch = Regex.Match(modInfo.Version, versionPattern)
+            
+            if versionMatch.Success then
+                Ok {
+                    Major = int versionMatch.Groups.[1].Value
+                    Minor = int versionMatch.Groups.[2].Value
+                    Patch = int versionMatch.Groups.[3].Value
+                }
+            else
+                Error "Could not parse BAR version"
+        else
+            Error "This AI requires Beyond All Reason"
 ```
 
 ## BAR-Specific Data Integration
@@ -445,67 +430,74 @@ categories = {
 
 #### Accessing Unit Information via AI Interface
 
-```csharp
-// .NET AI Implementation accessing BAR unit data
-public class BARUnitAnalyzer 
-{
-    public void AnalyzeUnit(int unitId)
-    {
-        // Get unit definition ID
-        var unitDefId = Callback.GetUnitDefId(unitId);
+```fsharp
+// F# AI Implementation accessing BAR unit data
+module BARUnitAnalyzer =
+    
+    let analyzeUnit (unitId: int) (worldState: WorldState) : UnitAnalysis =
+        // Get unit definition ID from world state arrays
+        let unitDefId = worldState.Units.[unitId].DefId
+        let unitDef = worldState.UnitDefinitions.[unitDefId]
         
-        // Access BAR-specific unit properties through engine interface
-        var unitName = Callback.GetUnitDefName(unitDefId);        // e.g., "armcom"
-        var categories = Callback.GetUnitCategories(unitDefId);   // e.g., "ARM COMMANDER CANATTACK"
-        var buildOptions = Callback.GetUnitBuildOptions(unitDefId);
+        // Access BAR-specific unit properties through immutable data
+        let unitName = unitDef.DefName                    // e.g., "armcom"
+        let categories = unitDef.Categories               // e.g., [|"ARM"; "COMMANDER"; "CANATTACK"|]
+        let buildOptions = worldState.UnitDefBuildOptions.[unitDefId]
         
-        // BAR faction detection
-        bool isARM = categories.Contains("ARM");
-        bool isCOR = categories.Contains("COR");
+        // BAR faction detection using pattern matching
+        let faction = 
+            match categories with
+            | cats when Array.contains "ARM" cats -> ARM
+            | cats when Array.contains "COR" cats -> COR
+            | _ -> Unknown
         
-        // BAR role detection
-        bool isCommander = categories.Contains("COMMANDER");
-        bool isBuilder = categories.Contains("BUILDER");
-        bool isFactory = categories.Contains("FACTORY");
+        // BAR role detection using active patterns
+        let role = 
+            match categories with
+            | cats when Array.contains "COMMANDER" cats -> Commander
+            | cats when Array.contains "BUILDER" cats -> Builder
+            | cats when Array.contains "FACTORY" cats -> Factory
+            | _ -> Generic
         
-        // Use BAR-specific logic
-        if (isCommander) {
-            HandleCommanderUnit(unitId, unitDefId);
-        } else if (isFactory) {
-            HandleFactoryUnit(unitId, unitDefId, buildOptions);
-        }
-    }
-}
+        // Use BAR-specific logic with pattern matching
+        match role with
+        | Commander -> 
+            handleCommanderUnit unitId unitDef worldState
+        | Factory -> 
+            handleFactoryUnit unitId unitDef buildOptions worldState        | _ -> 
+            handleGenericUnit unitId unitDef worldState
 ```
 
 ### Weapon System Integration
 
-BAR has an extensive weapon system accessible through the standard interface:
+BAR has an extensive weapon system accessible through immutable data structures:
 
-```csharp
-public class BARWeaponAnalyzer
-{
-    public void AnalyzeWeapons(int unitDefId)
-    {
-        // Get weapon definitions through engine interface
-        var weaponCount = Callback.GetUnitWeaponCount(unitDefId);
+```fsharp
+module BARWeaponAnalyzer =
+    
+    let analyzeWeapons (unitDefId: int) (worldState: WorldState) : WeaponAnalysis[] =
+        // Get weapon definitions from world state arrays
+        let weapons = worldState.UnitDefWeapons.[unitDefId]
         
-        for (int i = 0; i < weaponCount; i++) {
-            var weaponDefId = Callback.GetUnitWeapon(unitDefId, i);
-            var weaponName = Callback.GetWeaponDefName(weaponDefId);
-            var damage = Callback.GetWeaponDamage(weaponDefId);
-            var range = Callback.GetWeaponRange(weaponDefId);
-            var weaponType = Callback.GetWeaponType(weaponDefId);
+        weapons
+        |> Array.mapi (fun i weaponDefId ->
+            let weaponDef = worldState.WeaponDefinitions.[weaponDefId]
+            let weaponName = weaponDef.Name
+            let damage = weaponDef.Damage
+            let range = weaponDef.Range
+            let weaponType = weaponDef.WeaponType
             
-            // BAR-specific weapon analysis
-            if (weaponName.Contains("disintegrator")) {
-                // Handle D-Gun weapons
-                ConfigureCommanderWeapon(unitDefId, weaponDefId);
-            } else if (weaponType == "BeamLaser") {
-                // Handle laser weapons common in BAR
-                ConfigureLaserWeapon(unitDefId, weaponDefId);
-            }
-        }
+            // BAR-specific weapon analysis using pattern matching
+            let weaponClass = 
+                match weaponName, weaponType with
+                | name, _ when name.Contains("disintegrator") -> 
+                    DisintegratorWeapon  // D-Gun weapons
+                | _, "BeamLaser" -> 
+                    LaserWeapon          // Laser weapons common in BAR
+                | _ -> 
+                    StandardWeapon
+                    
+            { WeaponId = weaponDefId; Class = weaponClass; Damage = damage; Range = range }
     }
 }
 ```
@@ -515,31 +507,29 @@ public class BARWeaponAnalyzer
 BAR uses the standard Spring economy but with specific balance:
 
 ```csharp
-public class BAREconomyManager
-{
-    public void ManageResources()
-    {
-        // Standard Spring economy interface works with BAR
-        float metal = Callback.GetMetal();
-        float energy = Callback.GetEnergy();
-        float metalIncome = Callback.GetMetalIncome();
-        float energyIncome = Callback.GetEnergyIncome();
+module BAREconomyManager =
+    
+    let manageResources (worldState: WorldState) : Command[] =
+        // Standard Spring economy interface works with BAR through world state
+        let resources = worldState.Resources
+        let metal = resources.Metal
+        let energy = resources.Energy
+        let metalIncome = resources.MetalIncome
+        let energyIncome = resources.EnergyIncome
         
-        // BAR-specific economic strategies
-        float metalRatio = metal / Callback.GetMetalStorage();
-        float energyRatio = energy / Callback.GetEnergyStorage();
+        // BAR-specific economic strategies using pure functions
+        let metalRatio = metal / resources.MetalStorage
+        let energyRatio = energy / resources.EnergyStorage
         
-        if (metalRatio < 0.2f) {
-            // Build metal extractors or reclaimers
-            BuildMetalProduction();
-        }
-        
-        if (energyRatio < 0.3f) {
-            // Build energy production (solar/wind/geo)
-            BuildEnergyProduction();
-        }
-    }
-}
+        [|
+            if metalRatio < 0.2f<ratio> then
+                // Build metal extractors or reclaimers
+                yield! buildMetalProduction worldState
+            
+            if energyRatio < 0.3f<ratio> then
+                // Build energy production (solar/wind/geo)
+                yield! buildEnergyProduction worldState
+        |]
 ```
 
 ## BAR Game Rules and ModOptions
@@ -573,96 +563,122 @@ local options = {
 
 Accessing mod options in AI:
 
-```csharp
-public class BARGameConfiguration
-{
-    public void ReadGameSettings()
-    {
-        // Access mod options through engine interface
-        var modOptions = Callback.GetModOptions();
-        
-        int startMetal = int.Parse(modOptions.GetValueOrDefault("startmetal", "1000"));
-        string difficulty = modOptions.GetValueOrDefault("difficulty", "Normal");
-        
-        // Adapt AI strategy based on game settings
-        if (difficulty == "Brutal") {
-            aggressionLevel = 1.5f;
-            economicFocus = 0.8f;
-        }
-        
-        // Use starting metal information for early game strategy
-        if (startMetal > 2000) {
-            enableRushStrategy = true;
-        }
+```fsharp
+module BARGameConfiguration =
+    
+    type GameSettings = {
+        StartMetal: int<metal>
+        Difficulty: Difficulty
+        AggressionLevel: float32
+        EconomicFocus: float32
     }
-}
+    
+    and Difficulty = Easy | Normal | Hard | Brutal
+    
+    let readGameSettings (modOptions: Map<string, string>) : GameSettings =
+        // Access mod options through immutable map
+        let startMetal = 
+            modOptions.TryFind("startmetal") 
+            |> Option.defaultValue "1000" 
+            |> int
+            |> (*) 1<metal>
+        
+        let difficulty = 
+            match modOptions.TryFind("difficulty") |> Option.defaultValue "Normal" with
+            | "Easy" -> Easy
+            | "Normal" -> Normal
+            | "Hard" -> Hard
+            | "Brutal" -> Brutal
+            | _ -> Normal
+        
+        // Adapt AI strategy based on game settings using pattern matching
+        let aggressionLevel, economicFocus = 
+            match difficulty with            | Hard -> 1.2f, 0.9f
+            | Normal -> 1.0f, 1.0f
+            | Easy -> 0.8f, 1.2f
+            | Brutal -> 1.5f, 0.8f
+        
+        {
+            StartMetal = startMetal
+            Difficulty = difficulty
+            AggressionLevel = aggressionLevel
+            EconomicFocus = economicFocus
+        }
+    
+    let shouldEnableRushStrategy (settings: GameSettings) : bool =
+        // Use starting metal information for early game strategy
+        settings.StartMetal > 2000<metal>
 ```
 
 ### Game Rules Access
 
 BAR customizes engine behavior through modrules:
 
-```csharp
-public class BARGameRules
-{
-    public void InitializeGameRules()
-    {
-        // Engine exposes mod rules through standard interface
-        bool constructionDecay = Callback.GetModRule("constructionDecay");
-        float reclaimSpeed = Callback.GetModRuleFloat("reclaimSpeed");
-        int maxUnits = Callback.GetModRuleInt("maxUnits");
-        
-        // Adapt AI behavior to game rules
-        if (constructionDecay) {
-            // Prioritize faster construction completion
-            builderAllocationStrategy = BuilderStrategy.FastCompletion;
-        }
-        
-        if (maxUnits < 500) {
-            // Focus on quality over quantity
-            unitProductionStrategy = ProductionStrategy.Elite;
-        }
+```fsharp
+module BARGameRules =
+    
+    type GameRules = {
+        ConstructionDecay: bool
+        ReclaimSpeed: float32
+        MaxUnits: int
     }
-}
+    
+    let initializeGameRules (modRules: Map<string, string>) : GameRules =
+        // Engine exposes mod rules through immutable map
+        let constructionDecay = 
+            modRules.TryFind("constructionDecay") 
+            |> Option.map bool.Parse 
+            |> Option.defaultValue false
+            
+        let reclaimSpeed = 
+            modRules.TryFind("reclaimSpeed") 
+            |> Option.map float32 
+            |> Option.defaultValue 1.0f
+            
+        let maxUnits = 
+            modRules.TryFind("maxUnits") 
+            |> Option.map int        
+        {
+            ConstructionDecay = constructionDecay
+            ReclaimSpeed = reclaimSpeed
+            MaxUnits = maxUnits
+        }
+    
+    let adaptAIBehavior (rules: GameRules) : AIBehaviorSettings =
+        {
+            BuilderStrategy = 
+                if rules.ConstructionDecay then BuilderStrategy.FastCompletion
+                else BuilderStrategy.Balanced
+                
+            ProductionStrategy = 
+                if rules.MaxUnits < 500 then ProductionStrategy.Elite
+                else ProductionStrategy.Quantity
+        }
 ```
 
 ## BAR Unit Identification Patterns
 
 ### Faction Detection
 
-```csharp
-public enum BARFaction { ARM, COR, Unknown }
+```fsharp
+type BARFaction = ARM | COR | Unknown
 
-public class BARUnitClassifier
-{
-    public BARFaction IdentifyFaction(int unitDefId)
-    {
-        string unitName = Callback.GetUnitDefName(unitDefId);
-        string categories = Callback.GetUnitCategories(unitDefId);
-        
-        // BAR naming conventions
-        if (unitName.StartsWith("arm") || categories.Contains("ARM")) {
-            return BARFaction.ARM;
-        } else if (unitName.StartsWith("cor") || categories.Contains("COR")) {
-            return BARFaction.COR;
-        }
-        
-        return BARFaction.Unknown;
-    }
+module BARUnitClassifier =
     
-    public BARUnitRole ClassifyRole(int unitDefId)
-    {
-        string categories = Callback.GetUnitCategories(unitDefId);
-        
-        if (categories.Contains("COMMANDER")) return BARUnitRole.Commander;
-        if (categories.Contains("BUILDER")) return BARUnitRole.Builder;
-        if (categories.Contains("FACTORY")) return BARUnitRole.Factory;
-        if (categories.Contains("WEAPON")) return BARUnitRole.Combat;
-        if (categories.Contains("ENERGY")) return BARUnitRole.Energy;
-        if (categories.Contains("METAL")) return BARUnitRole.Metal;
-        
-        return BARUnitRole.Unknown;
-    }
+    let identifyFaction (unitDef: UnitDefinition) : BARFaction =        match unitDef.DefName, unitDef.Categories with
+        | name, cats when name.StartsWith("arm") || Array.contains "ARM" cats -> ARM
+        | name, cats when name.StartsWith("cor") || Array.contains "COR" cats -> COR
+        | _ -> Unknown
+    
+    let classifyRole (unitDef: UnitDefinition) : BARUnitRole =
+        match unitDef.Categories with
+        | cats when Array.contains "COMMANDER" cats -> BARUnitRole.Commander
+        | cats when Array.contains "BUILDER" cats -> BARUnitRole.Builder
+        | cats when Array.contains "FACTORY" cats -> BARUnitRole.Factory
+        | cats when Array.contains "WEAPON" cats -> BARUnitRole.Combat
+        | cats when Array.contains "ENERGY" cats -> BARUnitRole.Energy
+        | cats when Array.contains "METAL" cats -> BARUnitRole.Metal
+        | _ -> BARUnitRole.Unknown
 }
 ```
 
