@@ -49,12 +49,11 @@ if(BUILD_${myName}_AIWRAPPER)
     ai_wrapper_message(STATUS "Found AI Wrapper: ${myTarget}")
     
     set_global(${myName}_AIWRAPPER_TARGET ${myTarget})
-    
-    # Build native interop library
+      # Build native interop library
     set(myNativeTarget "${myTarget}-Native")
     set(myNativeSources
-        "${mySourceDir}/native/DotNetExport.cpp"
-        "${mySourceDir}/native/DotNetInterface.cpp"
+        "${mySourceDir}/native/SpringAIWrapperExports.cpp"
+        "${mySourceDir}/native/SpringAIWrapperInterface.cpp"
     )
     
     add_library(${myNativeTarget} MODULE ${myNativeSources})

@@ -102,6 +102,294 @@ sequenceDiagram
     Engine->>BAR: Apply commands to game state
 ```
 
+## BAR Data Storage and Access Mechanisms
+
+### Where BAR Information is Stored
+
+BAR-specific game data is stored in multiple locations within the game directory structure and is processed through several layers before reaching the .NET AI wrapper:
+
+#### 1. Static Game Definition Files
+
+**Location**: `BAR.sdd/` (game archive)
+```
+BAR.sdd/
+├── units/                        # Lua unit definition files
+│   ├── armcom.lua               # ARM Commander definition
+│   ├── armsolar.lua             # ARM Solar Collector definition
+│   └── [unit_name].lua          # Pattern for all units
+├── weapons/                      # Lua weapon definition files
+│   ├── armcom_weapon.lua        # Commander weapons
+│   └── [weapon_name].lua        # Pattern for all weapons
+├── gamedata/                     # Core game rules and constants
+│   ├── alldefs.lua              # Global definitions
+│   ├── armordefs.lua            # Armor type definitions
+│   └── movedefs.lua             # Movement type definitions
+├── luarules/                     # Server-side game logic
+│   ├── gadgets/                 # Game mechanics (Lua)
+│   └── configs/                 # Configuration files
+└── modinfo.lua                   # Game metadata and engine requirements
+```
+
+**Data Format**: All stored as Lua tables with typed properties
+```lua
+-- Example: armcom.lua (ARM Commander)
+local unitDef = {
+    name = "ARM Commander",
+    description = "Commander",
+    acceleration = 0.18,
+    activateWhenBuilt = true,
+    buildCostMetal = 2500,
+    buildCostEnergy = 25000,
+    buildTime = 30000,
+    canAttack = true,
+    canGuard = true,
+    canMove = true,
+    canPatrol = true,
+    category = "ALL COMMANDER MOBILE WEAPON SURFACE",
+    corpse = "ARMCOM_DEAD",
+    explodeAs = "COMMANDER_BLAST",
+    footprintX = 2,
+    footprintZ = 2,
+    health = 3000,
+    maxDamage = 3000,
+    -- ... hundreds more properties
+}
+```
+
+#### 2. Runtime Engine Processing
+
+**When Accessed**: During game initialization and runtime
+```cpp
+// Engine processes Lua definitions into C++ structures
+struct UnitDef {
+    int id;                    // Unique unit definition ID
+    std::string name;          // Human readable name
+    std::string filename;      // Internal filename
+    float metalCost;           // Metal cost to build
+    float energyCost;          // Energy cost to build
+    float health;              // Maximum hit points
+    std::vector<std::string> categories; // Category strings
+    // ... 200+ more fields
+};
+```
+
+#### 3. AI Interface Layer Translation
+
+**How Information Flows**: Lua → C++ Engine → C AI Interface → .NET P/Invoke → C# Objects
+
+```cpp
+// C AI Interface (ExternalAI/Interface/)
+typedef struct {
+    int unitDefId;
+    const char* name;
+    const char* filename;
+    float metalCost;
+    float energyCost;
+    float maxHealth;
+    // Simplified structure for AI consumption
+} SAIUnitDef;
+```
+
+### .NET Wrapper Data Access Patterns
+
+#### 1. P/Invoke Layer (Interop/NativeMethods.cs)
+
+**String Handling**: BAR uses UTF-8 strings passed via C interface
+```csharp
+[DllImport("SpringAIWrapper", CallingConvention = CallingConvention.Cdecl)]
+private static extern IntPtr GetUnitDefName(int unitDefId);
+
+[DllImport("SpringAIWrapper", CallingConvention = CallingConvention.Cdecl)]
+private static extern IntPtr GetUnitDefCategories(int unitDefId, out int count);
+
+// String marshaling with proper UTF-8 handling
+public static string GetUnitName(int unitDefId)
+{
+    IntPtr ptr = GetUnitDefName(unitDefId);
+    return ptr != IntPtr.Zero ? Marshal.PtrToStringUTF8(ptr) : string.Empty;
+}
+```
+
+#### 2. Typed .NET Objects (Auto-Generated from Engine Data)
+
+**No Manual String Parsing**: Categories are pre-processed by engine
+```csharp
+public class UnitDefinition
+{
+    public int Id { get; internal set; }
+    public string Name { get; internal set; }           // "ARM Commander"
+    public string DefName { get; internal set; }        // "armcom"
+    public float MetalCost { get; internal set; }       // 2500.0f
+    public float EnergyCost { get; internal set; }      // 25000.0f
+    public float MaxHealth { get; internal set; }       // 3000.0f
+    
+    // Categories converted from Lua string to .NET collection
+    public IReadOnlyList<string> Categories { get; internal set; }  
+    // ["ALL", "COMMANDER", "MOBILE", "WEAPON", "SURFACE"]
+    
+    // BAR-specific faction detection (derived from defName)
+    public BARFaction Faction => DefName.StartsWith("arm") ? BARFaction.ARM 
+                               : DefName.StartsWith("cor") ? BARFaction.COR 
+                               : BARFaction.Unknown;
+}
+```
+
+#### 3. BAR-Specific Data Enrichment
+
+**Runtime Enhancement**: .NET wrapper adds BAR-specific intelligence
+```csharp
+public static class BARExtensions
+{
+    // BAR-specific unit classification
+    public static BARUnitType GetBARUnitType(this UnitDefinition unitDef)
+    {
+        var categories = unitDef.Categories;
+        
+        if (categories.Contains("COMMANDER")) return BARUnitType.Commander;
+        if (categories.Contains("BUILDER")) return BARUnitType.Builder;
+        if (categories.Contains("FACTORY")) return BARUnitType.Factory;
+        if (categories.Contains("WEAPON") && categories.Contains("MOBILE")) 
+            return BARUnitType.MobileWeapon;
+        if (categories.Contains("ENERGY")) return BARUnitType.EnergyProducer;
+        if (categories.Contains("METAL")) return BARUnitType.MetalExtractor;
+        
+        return BARUnitType.Unknown;
+    }
+    
+    // BAR build tree analysis
+    public static IEnumerable<string> GetBuildOptions(this UnitDefinition unitDef, IGameCallback callback)
+    {
+        // Query engine for build options (cached for performance)
+        return callback.GetUnitDefBuildOptions(unitDef.Id);
+    }
+}
+```
+
+### Data Access Timing and Performance
+
+#### 1. Initialization Phase (Game Start)
+```csharp
+public override void OnInit(int skirmishAIId, bool savedGame)
+{
+    // Pre-cache all unit definitions (expensive, done once)
+    _unitDefinitions = new Dictionary<int, UnitDefinition>();
+    
+    int unitDefCount = Callback.GetUnitDefCount();
+    for (int i = 0; i < unitDefCount; i++)
+    {
+        var unitDef = Callback.GetUnitDef(i);
+        _unitDefinitions[unitDef.Id] = unitDef;
+        
+        // BAR-specific preprocessing
+        if (unitDef.GetBARUnitType() == BARUnitType.Factory)
+        {
+            _factoryTypes.Add(unitDef.DefName, unitDef.GetBuildOptions(Callback));
+        }
+    }
+}
+```
+
+#### 2. Runtime Access (Per-Frame Operations)
+```csharp
+public override void OnUpdate(int frame)
+{
+    // Fast lookup - no string parsing at runtime
+    var myUnits = Callback.GetFriendlyUnits();
+    foreach (var unit in myUnits)
+    {
+        // O(1) lookup using cached definitions
+        var unitDef = _unitDefinitions[unit.DefId];
+        
+        // BAR-specific decision making using typed data
+        switch (unitDef.GetBARUnitType())
+        {
+            case BARUnitType.Commander:
+                HandleCommander(unit, unitDef);
+                break;
+            case BARUnitType.Factory:
+                ManageProduction(unit, unitDef);
+                break;
+            // ... other cases
+        }
+    }
+}
+```
+
+### BAR-Specific Information Types
+
+#### 1. Unit Metadata (From Lua Definitions)
+- **Faction**: Derived from unit definition name prefix (`arm*`, `cor*`)
+- **Tech Level**: Derived from advanced vs basic building requirements
+- **Economic Data**: Metal/Energy costs, build time, resource production rates
+- **Combat Data**: Weapon definitions, armor types, movement capabilities
+- **Build Dependencies**: What buildings are required to construct this unit
+
+#### 2. Dynamic Game State (From Engine Events)
+- **Resource Flow**: Current metal/energy income and storage
+- **Map Information**: Metal spots, geographical features, choke points  
+- **Unit Status**: Health, experience level, current orders, ammunition
+- **Team Relations**: Allied/enemy status, shared resources, communication
+
+#### 3. BAR Game Rules (From luarules/)
+- **Economic Rules**: Overdrive, metal extraction efficiency, energy conversion
+- **Combat Rules**: Damage types, armor effectiveness, weapon ranges
+- **Construction Rules**: Build restrictions, terraform limitations, unit limits
+
+### Error Handling and Validation
+
+#### 1. Data Integrity Checks
+```csharp
+public class SafeGameDataAccess
+{
+    public static UnitDefinition GetValidatedUnitDef(IGameCallback callback, int unitDefId)
+    {
+        try
+        {
+            var unitDef = callback.GetUnitDef(unitDefId);
+            if (unitDef == null)
+                throw new InvalidDataException($"Unit definition {unitDefId} not found");
+                
+            if (string.IsNullOrEmpty(unitDef.Name))
+                throw new InvalidDataException($"Unit definition {unitDefId} has no name");
+                
+            return unitDef;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning($"Failed to get unit definition {unitDefId}: {ex.Message}");
+            return CreateFallbackUnitDef(unitDefId);
+        }
+    }
+}
+```
+
+#### 2. BAR Version Compatibility
+```csharp
+public class BARVersionDetection
+{
+    public static BARVersion DetectBARVersion(IGameCallback callback)
+    {
+        var modInfo = callback.GetModInfo();
+        
+        // Parse version from mod information
+        if (modInfo.Name.Contains("Beyond All Reason"))
+        {
+            var versionMatch = Regex.Match(modInfo.Version, @"(\d+)\.(\d+)\.(\d+)");
+            if (versionMatch.Success)
+            {
+                return new BARVersion(
+                    int.Parse(versionMatch.Groups[1].Value),
+                    int.Parse(versionMatch.Groups[2].Value),
+                    int.Parse(versionMatch.Groups[3].Value)
+                );
+            }
+        }
+        
+        throw new UnsupportedModException("This AI requires Beyond All Reason");
+    }
+}
+```
+
 ## BAR-Specific Data Integration
 
 ### Unit Definition System

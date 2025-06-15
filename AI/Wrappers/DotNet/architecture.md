@@ -272,7 +272,7 @@ if(DOTNET_FOUND AND NOT myName MATCHES "${AI_EXCLUDE_REGEX}")
     # Build native interop library
     add_library(${myName}-AIWrapper-Native SHARED
         src/native/DotNetExport.cpp
-        src/native/DotNetInterface.cpp
+        src/native/SpringAIWrapperInterface.cpp
     )
     
     # Build .NET assembly
@@ -292,8 +292,9 @@ AI/Wrappers/DotNet/
 ├── src/
 │   ├── native/                    # C++ interop layer
 │   │   ├── DotNetExport.cpp       # AI interface exports
-│   │   ├── DotNetInterface.cpp    # .NET bridge
-│   │   └── DotNetInterface.h      # Headers
+│   │   ├── SpringAIWrapperInterface.cpp    # .NET bridge
+│   │   ├── SpringAIWrapperInterface.h      # Headers
+│   │   └── SpringAIWrapperExports.cpp      # C exports
 │   └── managed/                   # .NET code
 │       ├── SpringAI.Wrapper.csproj
 │       ├── Interop/               # P/Invoke declarations

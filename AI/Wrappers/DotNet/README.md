@@ -6,6 +6,14 @@ This directory contains a .NET wrapper for creating AI implementations for the R
 
 The .NET wrapper allows you to write AI implementations in C#, F#, and other .NET languages. It provides a bridge between the native C AI interface and managed .NET code, handling marshalling of data types, events, and commands.
 
+### .NET Naming Conventions
+
+This wrapper follows standard .NET naming conventions:
+- **PascalCase** for classes, methods, properties, and file names
+- **camelCase** for parameters and local variables  
+- **Descriptive names** that clearly indicate purpose
+- **Consistent file naming** matching contained class names
+
 ### F# Support
 
 The wrapper is designed to be highly F#-friendly, with:
@@ -23,8 +31,8 @@ See `FSharpConsiderations.md` for detailed F# integration guidelines.
 The wrapper consists of two main components:
 
 ### Native Layer (`src/native/`)
-- **DotNetInterface.h/cpp**: Main interface class that manages .NET AI instances
-- **DotNetExport.cpp**: C exports required by the Spring AI interface system
+- **SpringAIWrapperInterface.h/cpp**: Main interface class that manages .NET AI instances
+- **SpringAIWrapperExports.cpp**: C exports required by the Spring AI interface system
 
 ### Managed Layer (`src/managed/`)
 - **Interop/**: P/Invoke declarations for calling native functions
