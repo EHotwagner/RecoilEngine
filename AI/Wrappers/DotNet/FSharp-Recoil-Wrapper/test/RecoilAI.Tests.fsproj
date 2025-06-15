@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>RecoilAI.Tests</AssemblyName>
+    
+    <!-- F# specific settings -->
+    <OtherFlags>--warnon:1182 --strict-indentation-</OtherFlags>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>  <ItemGroup>
+    <!-- Test source files -->
+    <Compile Include="TestRunner.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Reference the core library -->
+    <ProjectReference Include="..\src\RecoilAI.Core.fsproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NUnit" Version="3.13.3" />
+    <PackageReference Include="NUnit3TestAdapter" Version="4.5.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.7.1" />
+  </ItemGroup>
+
+</Project>
