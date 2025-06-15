@@ -1,14 +1,13 @@
-# .NET AI Wrapper for RecoilEngine/Spring
+# F# RecoilEngine AI Development Platform
 
-**F#-First Data-Oriented AI Development Platform for Beyond All Reason (BAR)**
+**Pure F# Data-Oriented AI Development for Beyond All Reason (BAR)**
 
-This wrapper provides a modern, high-performance .NET interface for developing AI for the RecoilEngine (formerly Spring Engine). Designed with a data-oriented architecture and F#-first approach, it enables efficient batch processing and cache-friendly AI systems optimized for Beyond All Reason (BAR).
+This platform provides a modern, high-performance F# interface for developing AI for the RecoilEngine (formerly Spring Engine). Designed with a pure data-oriented architecture, it enables efficient batch processing and cache-friendly AI systems optimized for Beyond All Reason (BAR).
 
 ## 🎯 Key Features
 
-- **F#-First Design**: Leverages F#'s superior type system and array processing capabilities
+- **Pure F# Design**: Leverages F#'s superior type system and array processing capabilities
 - **Data-Oriented Architecture**: Arrays and batch processing for optimal performance
-- **C# Compatibility**: Full compatibility layer for C# developers
 - **Type Safety**: Units of measure prevent resource calculation bugs
 - **Cache-Friendly**: Structured data layout optimized for modern CPU architectures
 - **Batch Processing**: Event collections and world state arrays for efficient updates
@@ -34,12 +33,6 @@ graph TB
         I[Scouting System]
     end
     
-    subgraph "C# Compatibility"
-        J[OOP Event Adapters]
-        K[Traditional Interfaces]
-        L[Type Converters]
-    end
-    
     subgraph "Native Layer"
         M[RecoilEngine Callbacks]
         N[P/Invoke Interface]
@@ -48,6 +41,10 @@ graph TB
     A --> F
     A --> G
     A --> H
+    A --> I
+    
+    M --> A
+    N --> B
     A --> I
     B --> F
     B --> G
@@ -60,10 +57,30 @@ graph TB
     A --> J
     B --> J
     J --> K
-    
-    A --> "F# Data-Oriented AI"
-    J --> "C# Traditional AI"
+      A --> "F# Data-Oriented AI"
 ```
+
+## 📁 Project Structure
+
+This platform is organized into two distinct components:
+
+### FSharp-Recoil-Wrapper/
+**Pure F# engine wrapper** - Provides direct, efficient access to RecoilEngine functionality
+- `src/` - F# wrapper core files (Types.fs, Interop.fs, Commands.fs, etc.)
+- `native/` - Native C++ P/Invoke interface files
+- Purpose: Low-level, data-oriented engine access
+
+### FSharp-BAR-AI/
+**BAR-specific AI implementation** - High-level AI logic for Beyond All Reason
+- `src/` - F# BAR AI implementation files
+- `examples/` - Complete working AI examples and patterns
+- Purpose: Game-specific AI strategies and behaviors
+
+This separation ensures:
+- **Clean dependencies**: Wrapper has no game-specific logic
+- **Reusability**: Engine wrapper can be used for other Spring games
+- **Maintainability**: Clear boundary between engine interface and AI logic
+- **Performance**: Each component optimized for its specific role
 
 ### Why F#-First Data-Oriented Design?
 
@@ -75,8 +92,6 @@ Real-time strategy games require high-performance AI that can process hundreds o
 - **Functional composition**: F#'s array processing is highly optimized
 - **Type safety**: Units of measure and discriminated unions prevent common bugs
 - **Immutable snapshots**: Pure functions enable easy testing and debugging
-
-**C# developers still get full support** through the compatibility layer, but benefit from F#'s optimizations automatically.
 
 ## 🚀 Quick Start
 
@@ -114,63 +129,9 @@ type DataOrientedAI() =
         let idleBuilders = 
             events.UnitsIdle
             |> Array.filter (fun unitId -> this.IsBuilder(world.Units.[unitId]))
-        
-        // Assign construction tasks efficiently
+          // Assign construction tasks efficiently
         let tasks = this.PlanConstruction(world, idleBuilders)
         tasks |> Array.iter this.IssueConstructionOrder
-```
-
-### C# Traditional Development (Compatibility)
-
-```csharp
-using SpringAI.CSharp.AI;
-
-public class MyAI : BaseCSharpAI
-{
-    protected override void ProcessUpdate(int frame, ResourceState resources, Strategy strategy)
-    {
-        var builders = GetFriendlyUnits().Where(u => u.IsBuilder).ToList();
-        
-        foreach (var builder in builders.Take(1))
-        {
-            if (resources.CanAfford(100, 50)) // F# type safety prevents bugs
-            {
-                var command = new BuildCommand(builder.Id, "armlab", builder.Position);
-                ExecuteCommand(TypeConverters.ToFSCommand(command)); // F# validation
-            }
-        }
-    }
-}
-```
-
-## 📁 Project Structure
-
-```
-src/
-├── fsharp-core/           # Primary F# API
-│   ├── Types.fs           # Discriminated unions, records, units of measure
-│   ├── GameContext.fs     # F# interfaces and context
-│   ├── AI.fs              # F# AI interface with computation expressions
-│   └── ActivePatterns.fs  # Pattern matching helpers
-│
-├── csharp-compat/         # C# compatibility layer
-│   ├── AI/               # C# AI interfaces and adapters
-│   ├── Commands/         # C# command classes
-│   ├── Compatibility/    # F#↔C# type converters
-│   └── Events/           # C# event classes
-│
-├── native/               # Native C++ interop
-└── managed/              # Legacy/transition code (being phased out)
-
-examples/
-├── FSharp/               # F# example AIs
-└── CSharp/               # C# example AIs using F# core
-
-docs/
-├── Architecture.md       # Detailed architecture documentation
-├── BarIntegration.md     # BAR-specific integration details
-├── FSharpConsiderations.md # F# language design considerations
-└── F#-First-Architecture.md # Complete F#-first design guide
 ```
 
 ## 🔧 Building
@@ -178,6 +139,7 @@ docs/
 ### Prerequisites
 
 - .NET 8.0 SDK or later
+- F# support (comes with .NET SDK)
 - Visual Studio 2022, VS Code, or JetBrains Rider
 - CMake 3.15+ (for native components)
 - C++17 compatible compiler
@@ -185,13 +147,19 @@ docs/
 ### Build Commands
 
 ```bash
-# Build F# core (primary API)
-cd src/fsharp-core
+# Build F# wrapper core
+cd FSharp-Recoil-Wrapper/src
 dotnet build
 
-# Build C# compatibility layer
-cd src/csharp-compat
+# Build F# BAR AI implementation
+cd FSharp-BAR-AI/src
 dotnet build
+
+# Build native interop layer
+cd FSharp-Recoil-Wrapper/native
+mkdir build && cd build
+cmake ..
+cmake --build .
 
 # Build native interop layer
 mkdir build && cd build
@@ -201,10 +169,11 @@ cmake --build .
 
 ## 📚 Documentation
 
-- **[F#-First Architecture](F%23-First-Architecture.md)** - Complete design philosophy and implementation
+- **[F# Data-Oriented Architecture](FSharp-DataOriented-Architecture.md)** - Complete design philosophy and implementation
 - **[Architecture Overview](Architecture.md)** - System architecture and data flow
 - **[BAR Integration](BarIntegration.md)** - BAR-specific features and data access
-- **[F# Considerations](FSharpConsiderations.md)** - F# language design decisions
+- **[Implementation Plan](IMPLEMENTATION_PLAN.md)** - Step-by-step development roadmap
+- **[Quick Start Guide](QUICK_START_GUIDE.md)** - Getting started quickly
 
 ## 🎮 BAR-Specific Features
 
@@ -244,16 +213,16 @@ let determinePhase frame resources =
 
 ## 🤝 Contributing
 
-1. **F# developers**: Contribute to the core API in `src/fsharp-core/`
-2. **C# developers**: Improve compatibility layer in `src/csharp-compat/`
-3. **Game experts**: Enhance BAR-specific features and examples
+1. **F# developers**: Contribute to the core wrapper API in `FSharp-Recoil-Wrapper/src/`
+2. **AI developers**: Enhance BAR-specific features in `FSharp-BAR-AI/src/`
+3. **Game experts**: Improve BAR-specific strategies and examples
 4. **Documentation**: Help improve guides and examples
 
 ### Development Workflow
 
 1. Fork the repository
 2. Create a feature branch
-3. Implement changes (F# core first, then C# compatibility)
+3. Implement changes (wrapper core or AI implementation)
 4. Add tests and examples
 5. Update documentation
 6. Submit a pull request
@@ -271,11 +240,11 @@ This project is licensed under the GPL v2+ - see the [LICENSE](../../LICENSE) fi
 
 ---
 
-**Ready to build the next generation of RTS AI?** Start with F# for maximum power, or use C# for familiarity - either way, you get the benefits of F#'s superior type system.
+**Ready to build the next generation of RTS AI with F#?** Get started with the pure data-oriented approach for maximum performance and type safety.
 
 ## Overview
 
-The .NET wrapper allows you to write AI implementations in C#, F#, and other .NET languages. It provides a bridge between the native C AI interface and managed .NET code, handling marshalling of data types, events, and commands.
+This F# platform provides a pure data-oriented interface for developing AI for the RecoilEngine. It handles marshalling of data types, events, and commands through direct P/Invoke interfaces, eliminating unnecessary layers and maximizing performance.
 
 ### .NET Naming Conventions
 
@@ -393,12 +362,12 @@ float metal = Callback.GetMetal();
 
 ## Example AI
 
-See `examples/ExampleDotNetAI.cs` for a complete C# example that demonstrates:
-- Basic initialization
-- Resource monitoring
-- Unit management
-- Enemy engagement
-- Event handling
+See `FSharp-BAR-AI/examples/` for complete F# examples that demonstrate:
+- Data-oriented world state management
+- Efficient batch processing
+- Resource monitoring with units of measure
+- Unit management through arrays
+- Type-safe event handling
 
 For F# developers, see:
 - `examples/FSharpAI.fs` - F# AI implementation using functional programming patterns
