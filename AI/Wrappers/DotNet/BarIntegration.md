@@ -9,26 +9,26 @@ Beyond All Reason (BAR) is a complete Real-Time Strategy game built on top of th
 ```mermaid
 graph TB
     subgraph "BAR Game Engine"
-        BarMod[BAR Game Mod<br/>~200 Unit Types] --> SpringEngine[RecoilEngine/Spring<br/>30Hz Simulation]
-        SpringEngine --> AIInterface[AI Interface Layer]
-        AIInterface --> DataWrapper[Data-Oriented .NET Wrapper]
-        DataWrapper --> ArrayProcessor[F# Array Processor<br/>Cache-Optimized]
-        ArrayProcessor --> AIImplementation[High-Performance BAR AI]
+        BarMod["BAR Game Mod<br/>~200 Unit Types"] --> SpringEngine["RecoilEngine/Spring<br/>30Hz Simulation"]
+        SpringEngine --> AIInterface["AI Interface Layer"]
+        AIInterface --> DataWrapper["Data-Oriented .NET Wrapper"]
+        DataWrapper --> ArrayProcessor["F# Array Processor<br/>Cache-Optimized"]
+        ArrayProcessor --> AIImplementation["High-Performance BAR AI"]
     end
     
-    subgraph "Static Game Data (Definition Arrays)"
-        UnitDefs[Unit Definition Arrays<br/>~200 Unit Types<br/>Cost, Health, Speed, etc.]
-        WeaponDefs[Weapon Definition Arrays<br/>~150 Weapon Types<br/>Damage, Range, Rate]
-        MoveDefs[Movement Arrays<br/>Tank, Kbot, Aircraft, Ship]
-        FeatureDefs[Feature Arrays<br/>Metal Spots, Geo Vents]
+    subgraph "Static Game Data Definition Arrays"
+        UnitDefs["Unit Definition Arrays<br/>~200 Unit Types<br/>Cost, Health, Speed, etc."]
+        WeaponDefs["Weapon Definition Arrays<br/>~150 Weapon Types<br/>Damage, Range, Rate"]
+        MoveDefs["Movement Arrays<br/>Tank, Kbot, Aircraft, Ship"]
+        FeatureDefs["Feature Arrays<br/>Metal Spots, Geo Vents"]
     end
     
-    subgraph "Dynamic Runtime Arrays (Structure-of-Arrays)"
-        UnitArrays[Unit State Arrays<br/>int[] ids, Vector3[] positions<br/>float[] health, byte[] states]
-        ResourceArrays[Resource Arrays<br/>float[] metal, energy<br/>float[] income, storage]
-        MapArrays[Map Data Arrays<br/>float[] heightmap<br/>float[] metalmap]
-        SpatialArrays[Spatial Index Arrays<br/>Grid-based partitioning<br/>O(1) neighbor queries]
-        EventArrays[Event Collections<br/>Batched by frame<br/>GameEvent[] arrays]
+    subgraph "Dynamic Runtime Arrays SOA"
+        UnitArrays["Unit State Arrays<br/>int arrays for ids<br/>Vector3 arrays for positions<br/>float arrays for health<br/>byte arrays for states"]
+        ResourceArrays["Resource Arrays<br/>float arrays for metal, energy<br/>float arrays for income, storage"]
+        MapArrays["Map Data Arrays<br/>float arrays for heightmap<br/>float arrays for metalmap"]
+        SpatialArrays["Spatial Index Arrays<br/>Grid-based partitioning<br/>O(1) neighbor queries"]
+        EventArrays["Event Collections<br/>Batched by frame<br/>GameEvent arrays"]
     end
     
     BarMod --> UnitDefs
