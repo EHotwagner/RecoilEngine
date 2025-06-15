@@ -1,17 +1,20 @@
-/// Complete F# AI example demonstrating idiomatic F# usage
+/// Complete F# AI example demonstrating data-oriented, high-performance F# AI
 module BAR.AI.FSharp.ExampleAI
 
 open System
-open SpringAI  
+open System.Numerics
+open SpringAI.Core
+open SpringAI.Core.DataOrientedTypes
+open SpringAI.Core.DataOrientedProcessing
 open BAR.AI.FSharp.Types
 open BAR.AI.FSharp.ActivePatterns
 open BAR.AI.FSharp.GameCallback
 
-/// Example F# AI that demonstrates F# best practices
-type FunctionalBARAI() =
-    inherit BaseAI()
+/// Example F# AI demonstrating data-oriented, array-based processing
+type DataOrientedBARAI(context: IGameContext) =
+    inherit BaseFSharpAI(context)
     
-    // Immutable state using record types
+    // Immutable state using record types with array data
     let mutable currentState = {
         Metal = 0.0f<metal>
         Energy = 0.0f<energy>
@@ -20,64 +23,127 @@ type FunctionalBARAI() =
         Frame = 0<frame>
     }
     
-    let mutable currentStrategy = EconomicExpansion
-    let mutable threatLevel = Low
+    let mutable worldStateCache: WorldState option = None
+    let mutable spatialGridCache: SpatialGrid option = None
+    let mutable performanceMetrics = context.GetPerformanceMetrics()
     
-    // F# computation expression for command execution
-    let command = CommandBuilder(base.Callback)
+    // Array pools for memory efficiency
+    let commandPool = Array.zeroCreate<Command> 1000
+    let mutable commandPoolIndex = 0
     
-    // Efficient event conversion using EventType enum (no reflection!)
-    let convertToBAREvent (event: SpringAI.Events.AIEvent) : BAREvent =
-        match event.EventType with
-        | SpringAI.Events.EventType.UnitCreated ->
-            let e = event :?> SpringAI.Events.UnitCreatedEvent
-            UnitCreated(e.Frame, e.UnitId, e.BuilderId)
-        | SpringAI.Events.EventType.UnitDamaged ->
-            let e = event :?> SpringAI.Events.UnitDamagedEvent
-            UnitDamaged(e.Frame, e.UnitId, e.AttackerId, e.Damage)
-        | SpringAI.Events.EventType.UnitDestroyed ->
-            let e = event :?> SpringAI.Events.UnitDestroyedEvent
-            UnitDestroyed(e.Frame, e.UnitId, e.AttackerId)
-        | SpringAI.Events.EventType.Update ->
-            let e = event :?> SpringAI.Events.UpdateEvent
-            GameUpdate(e.Frame)
-        | SpringAI.Events.EventType.Init ->
-            let e = event :?> SpringAI.Events.InitEvent
-            GameInit(e.SkirmishAIId, e.SavedGame)
-        | SpringAI.Events.EventType.Release ->
-            let e = event :?> SpringAI.Events.ReleaseEvent
-            GameRelease(e.Reason)
-        | _ -> 
-            failwith $"Unknown event type: {event.EventType}"
-    
-    /// Strategy selection using pattern matching and active patterns
-    let selectStrategy (resources: ResourceState) (frame: int<frame>) (threats: ThreatInfo) =
-        match frame, resources, threats.Level with
-        | EarlyGame, ResourcePoor, _ -> EconomicExpansion
-        | EarlyGame, ResourceModerate, Low -> EconomicExpansion
-        | MidGame, ResourceRich, Low -> MilitaryBuildup
-        | MidGame, _, (Medium | High) -> DefensivePosition
-        | LateGame, ResourceRich, Low -> TechAdvancement
-        | _, _, Critical -> AttackMode threats.Source
-        | _ -> DefensivePosition
-    
-    /// Build priority using active patterns
-    let getBuildPriority unitDefName =
-        let units = Units.getFriendlyUnits base.Callback
-        match unitDefName, units, currentState with
-        | Critical -> 100
-        | High -> 75
-        | Medium -> 50
-        | Low -> 25
-    
-    /// Economic decision making using functional composition
-    let processEconomicDecisions () =
-        let resources = Resources.getResourceState base.Callback
+    /// Update state using efficient array operations
+    override this.ProcessFrameUpdate(frame) =
+        base.ProcessFrameUpdate(frame)
         
-        match resources with
-        | MetalStarved ->
-            this.RequestBuild "armmex" 3
-        | EnergyStarved ->
+        // Cache world state for this frame
+        worldStateCache <- Some (context.GetWorldState())
+        
+        // Update spatial grid every 10 frames for efficiency
+        if int frame % 10 = 0 then
+            let units = context.GetFriendlyUnitsArray()
+            spatialGridCache <- Some (buildSpatialGrid units 100.0f<elmo>)
+        
+        // Update performance metrics every 30 frames
+        if int frame % 30 = 0 then
+            performanceMetrics <- context.GetPerformanceMetrics()
+    
+    /// Efficient event batch processing
+    override this.ProcessEventBatch(eventBatch: EventBatch) =
+        // Process events in batches for optimal performance
+        processEventBatch eventBatch.Events this.ProcessSingleEvent
+    
+    /// Data-oriented build plan creation using world state arrays
+    override this.CreateBuildPlanFromWorldState(worldState: WorldState) : CommandBatch =
+        let builders = filterUnitsByFlags worldState 0b00000001uy // Builder flag
+        
+        if Array.isEmpty builders then
+            { Commands = [||]; CommandCount = 0; Priority = [||]; FrameToExecute = [||] }
+        else
+            // Analyze resource needs using array operations
+            let resourceAnalysis = this.AnalyzeResourceNeeds(worldState)
+            let commands = this.GenerateOptimalCommands(worldState, builders, resourceAnalysis)
+            
+            {
+                Commands = commands
+                CommandCount = commands.Length
+                Priority = Array.create commands.Length 5
+                FrameToExecute = Array.create commands.Length worldState.CurrentFrame
+            }
+    
+    /// Analyze resource needs using efficient array operations
+    member private this.AnalyzeResourceNeeds(worldState: WorldState) =
+        let myFaction = ARM
+        let myUnits = 
+            Array.zip worldState.UnitIds worldState.UnitFactions
+            |> Array.filter (fun (_, faction) -> faction = myFaction)
+            |> Array.map fst
+        
+        // Count economic vs military units using array operations
+        let economicCount = myUnits |> Array.filter (fun _ -> true) |> Array.length // Simplified
+        let militaryCount = myUnits |> Array.filter (fun _ -> true) |> Array.length // Simplified
+        
+        {|
+            NeedsMoreMetal = economicCount < 5
+            NeedsMoreEnergy = economicCount < 10
+            NeedsDefenses = militaryCount < economicCount / 2
+            TotalUnits = myUnits.Length
+        |}
+    
+    /// Generate optimal commands using data-oriented approach
+    member private this.GenerateOptimalCommands(worldState: WorldState, builders: int array, analysis) =
+        let buildCommands = ResizeArray<Command>()
+        
+        // Use spatial grid for optimal placement
+        match spatialGridCache with
+        | Some spatialGrid ->
+            for builderId in builders |> Array.take (min 5 builders.Length) do
+                let builderIndex = Array.findIndex ((=) builderId) worldState.UnitIds
+                let builderPos = worldState.UnitPositions.[builderIndex]
+                
+                // Determine what to build based on analysis
+                let unitToBuild = 
+                    if analysis.NeedsMoreMetal then "armmex"
+                    elif analysis.NeedsMoreEnergy then "armsolar"
+                    elif analysis.NeedsDefenses then "armrl"
+                    else "armlab"
+                
+                buildCommands.Add(Build(builderId, unitToBuild, builderPos))
+        | None -> ()
+        
+        buildCommands.ToArray()
+    
+    /// Threat assessment using spatial data and array operations
+    member private this.AssessThreatLevel(worldState: WorldState, position: Vector3) : ThreatAssessment =
+        calculateThreatAssessment worldState position 500.0f<elmo>
+    
+    /// Batch unit management using array operations
+    member private this.ManageUnitsBatch(worldState: WorldState) : Command array =
+        let commands = ResizeArray<Command>()
+        
+        // Find idle units using bit flags
+        let idleUnits = filterUnitsByFlags worldState 0b00000010uy // Idle flag
+        
+        // Assign tasks to idle units efficiently
+        for unitId in idleUnits |> Array.take (min 20 idleUnits.Length) do
+            let unitIndex = Array.findIndex ((=) unitId) worldState.UnitIds
+            let unitPos = worldState.UnitPositions.[unitIndex]
+            
+            // Simple patrol command for now
+            commands.Add(Patrol(unitId, [unitPos; Vector3(unitPos.X + 100.0f, unitPos.Y, unitPos.Z + 100.0f)]))
+        
+        commands.ToArray()
+    
+    /// Strategy selection using pattern matching and data analysis
+    member private this.SelectStrategyFromWorldState(worldState: WorldState) =
+        let analysis = this.AnalyzeResourceNeeds(worldState)
+        let threatAssessment = this.AssessThreatLevel(worldState, Vector3.Zero)
+        
+        match worldState.CurrentFrame, analysis, threatAssessment.Level with
+        | frame, _, _ when frame < 1800<frame> -> EconomicExpansion
+        | frame, analysis, ThreatLevel.Low when analysis.TotalUnits > 20 -> MilitaryBuildup
+        | _, _, level when level >= ThreatLevel.Medium -> DefensivePosition
+        | frame, _, _ when frame > 7200<frame> -> TechAdvancement
+        | _ -> EconomicExpansion
             this.RequestBuild "armsolar" 2
         | Balanced ->
             this.ProcessNormalEconomy()

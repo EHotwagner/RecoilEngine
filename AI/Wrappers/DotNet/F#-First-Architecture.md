@@ -1,79 +1,116 @@
-# F#-First .NET AI Wrapper Architecture Summary
+# F#-First Data-Oriented AI Wrapper Architecture
 
 ## Overview
 
-This document summarizes the **F#-first design approach** for the RecoilEngine/Spring AI wrapper, demonstrating how F# can be the primary API with C# as a secondary compatibility layer.
+This document summarizes the **F#-first data-oriented design approach** for the RecoilEngine/Spring AI wrapper, demonstrating how F# can provide optimal performance through array-based processing while maintaining C# compatibility.
 
-## Architecture Layers
+## Data-Oriented Architecture Layers
 
 ```mermaid
 graph TB
-    subgraph "F# Core (Primary API)"
-        A[Types.fs - DUs & Records]
-        B[GameContext.fs - F# Interfaces]
-        C[AI.fs - Computation Expressions]
-        D[ActivePatterns.fs - Pattern Matching]
+    subgraph "F# Core (Data-Oriented)"
+        A[WorldState.fs - Array-Based State]
+        B[Events.fs - Event Collections]
+        C[Systems.fs - Batch Processing]
+        D[GameContext.fs - Data Access]
+        E[Units.fs - Value Types & Measures]
+    end
+    
+    subgraph "AI Systems (F#)"
+        F[EconomySystem.fs]
+        G[MilitarySystem.fs]
+        H[BuildSystem.fs]
+        I[ScoutingSystem.fs]
     end
     
     subgraph "C# Compatibility Layer"
-        E[TypeConverters.cs - F#↔C# Bridge]
-        F[CSharpAIAdapter.cs - Interface Adapter]
-        G[CSharpCommand.cs - OOP Wrappers]
-        H[ICSharpAI.cs - Traditional Interface]
+        J[TypeConverters.cs - Array↔Collections]
+        K[CSharpAIAdapter.cs - Interface Bridge]
+        L[TraditionalEvents.cs - OOP Events]
+        M[ICSharpAI.cs - Legacy Interface]
     end
     
     subgraph "Native Interop"
-        I[SpringAIWrapperInterface.cpp]
-        J[P/Invoke Layer]
+        N[SpringAIWrapperInterface.cpp]
+        O[Event Buffering Layer]
     end
     
     subgraph "Applications"
-        K[F# AI Applications]
-        L[C# AI Applications]
+        P[F# Data-Oriented AI]
+        Q[C# Traditional AI]
     end
     
-    A --> E
+    A --> F
+    A --> G
+    A --> H
+    A --> I
     B --> F
-    C --> G
-    D --> H
+    B --> G
+    B --> H
+    B --> I
     
-    I --> J
-    J --> A
+    A --> J
+    B --> J
+    J --> K
+    K --> L
+    L --> M
     
-    A --> K
-    E --> L
-    F --> L
-    G --> L
-    H --> L
+    N --> O
+    O --> A
+    O --> B
+    
+    F --> P
+    G --> P
+    H --> P
+    I --> P
+    
+    J --> Q
+    K --> Q
+    L --> Q
+    M --> Q
 ```
 
-## Key Benefits of F#-First Design
+## Key Benefits of F#-First Data-Oriented Design
 
-### 1. **Superior Type System**
+### 1. **Cache-Friendly Performance**
 
 ```fsharp
-// F# Core - Compile-time unit safety
-[<Measure>] type metal
-[<Measure>] type energy
+// F# Core - Arrays of structs for optimal data locality
+[<Struct>]
+type UnitData = {
+    Id: int
+    Position: Vector3
+    Health: float32
+    DefId: UnitDefId
+}
 
-let canAfford (cost: float32<metal>) (available: float32<metal>) = 
-    available >= cost  // Type-safe comparison
-
-// C# gets this safety through the wrapper
+// Efficient batch processing
+let updateUnitsInRange (units: UnitData[]) (center: Vector3) (range: float32) =
+    units
+    |> Array.filter (fun unit -> Vector3.Distance(unit.Position, center) <= range)
+    |> Array.map (fun unit -> { unit with Health = unit.Health - 10.0f })
 ```
 
-### 2. **Null Safety**
+### 2. **Zero-Allocation Event Processing**
 
 ```fsharp
-// F# Core - No null reference exceptions
-type IGameContext =
-    abstract member GetUnit: int -> UnitInfo option  // Never null
+// F# Core - Structured event batching
+type FrameEvents = {
+    Frame: int
+    UnitsCreated: UnitCreatedData[]
+    UnitsDestroyed: UnitDestroyedData[]
+    UnitsDamaged: UnitDamagedData[]
+}
 
-// C# gets nullable types that map to F# options
-public UnitInfo? GetUnit(int unitId) // Compiler enforces null checks
+// Process entire frames worth of events at once
+let processFrame (world: WorldSnapshot) (events: FrameEvents) =
+    // No allocations during frame processing
+    let updatedUnits = Array.copy world.Units
+    events.UnitsDamaged |> Array.iter (fun dmg ->
+        updatedUnits.[dmg.UnitId] <- updateHealth updatedUnits.[dmg.UnitId] dmg.Damage)
 ```
 
-### 3. **Exhaustive Pattern Matching**
+### 3. **Type-Safe Units of Measure**
 
 ```fsharp
 // F# Core - Compiler guarantees all cases handled

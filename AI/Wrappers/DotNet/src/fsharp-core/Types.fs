@@ -1,9 +1,10 @@
 /// Core F# types for SpringAI wrapper
-/// Designed F#-first with C# compatibility as secondary concern
+/// Designed F#-first with data-oriented, array-based approach for high-performance AI
 namespace SpringAI.Core
 
 open System
 open System.Numerics
+open System.Runtime.InteropServices
 
 /// Units of measure for type safety
 [<Measure>] type metal
@@ -13,13 +14,56 @@ open System.Numerics
 [<Measure>] type hp      // Hit points
 [<Measure>] type dps     // Damage per second
 
+/// Array-based data structures for high-performance AI processing
+/// These align with data-oriented design principles for efficient cache usage
+
 /// BAR faction enumeration
 type BARFaction = 
     | ARM = 1
     | COR = 2
     | Unknown = 0
 
-/// Core game events - primary F# API
+/// World state arrays for data-oriented processing
+/// These represent the complete game state in array form for efficient batch operations
+[<Struct>]
+type WorldState = {
+    /// All units in SOA (Structure of Arrays) format for cache efficiency
+    UnitIds: int array
+    UnitPositions: Vector3 array
+    UnitHealth: float32 array
+    UnitMaxHealth: float32 array
+    UnitDefIds: int array
+    UnitFactions: BARFaction array
+    UnitStates: byte array  // Packed state flags (alive, moving, attacking, etc.)
+    
+    /// Resource state arrays for all players
+    PlayerMetal: float32 array
+    PlayerEnergy: float32 array
+    PlayerMetalIncome: float32 array
+    PlayerEnergyIncome: float32 array
+    
+    /// Map data arrays
+    MapHeightData: float32 array
+    MapMetalData: float32 array
+    MapSize: int * int
+    
+    /// Current simulation frame
+    CurrentFrame: int<frame>
+    
+    /// Event batches for this frame
+    EventBatch: GameEvent array
+}
+
+/// Event batch for efficient processing
+[<Struct>]
+type EventBatch = {
+    Events: GameEvent array
+    EventCount: int
+    FrameNumber: int<frame>
+    Timestamp: DateTimeOffset
+}
+
+/// Core game events - optimized for batch processing
 type GameEvent =
     | GameStarted of aiId: int * savedGame: bool
     | FrameUpdate of frame: int<frame>
@@ -27,6 +71,24 @@ type GameEvent =
     | UnitDamaged of unitId: int * attackerId: int * damage: float32 * frame: int<frame>
     | UnitDestroyed of unitId: int * attackerId: int * frame: int<frame>
     | GameEnded of reason: int
+
+/// Command batch for efficient command execution
+[<Struct>]
+type CommandBatch = {
+    Commands: Command array
+    CommandCount: int
+    Priority: int array
+    FrameToExecute: int<frame> array
+}
+
+/// Spatial partitioning data for efficient queries
+[<Struct>]
+type SpatialGrid = {
+    GridSize: int
+    CellSize: float32<elmo>
+    UnitCells: int array array  // Array of unit IDs per grid cell
+    MapBounds: Vector3 * Vector3
+}
 
 /// Resource state with units of measure
 type ResourceState = {
@@ -93,6 +155,7 @@ type ThreatAssessment = {
 }
 
 /// Build order DSL types
+/// Build order DSL types with array support
 type BuildCondition =
     | MetalReaches of float32<metal>
     | EnergyReaches of float32<energy>
@@ -107,11 +170,60 @@ type BuildStep =
     | Sequential of BuildStep list
     | Conditional of condition: (ResourceState -> bool) * ifTrue: BuildStep * ifFalse: BuildStep option
 
-/// Decision result for AI planning
+/// Decision result for AI planning with batch support
 type Decision<'T> = {
     Action: 'T
     Priority: int
     Reason: string
     RequiredResources: ResourceState option
     EstimatedDuration: int<frame> option
+}
+
+/// High-performance batch processing types
+module DataOrientedTypes =
+    
+    /// Compact unit representation for array processing
+    [<Struct>]
+    type CompactUnit = {
+        Id: int
+        DefId: int16
+        X: float32
+        Y: float32
+        Z: float32
+        Health: float32
+        MaxHealth: float32
+        Faction: BARFaction
+        StateFlags: byte  // Packed boolean states
+    }
+    
+    /// Efficient spatial query results
+    [<Struct>]
+    type SpatialQueryResult = {
+        UnitIds: int array
+        Distances: float32 array
+        Count: int
+    }
+    
+    /// Batch operation results
+    [<Struct>]
+    type BatchResult<'T> = {
+        Results: 'T array
+        SuccessCount: int
+        ErrorCount: int
+        ExecutionTime: TimeSpan
+    }
+    
+    /// Memory pool for reducing allocations
+    type ArrayPool<'T> = {
+        GetArray: int -> 'T array
+        ReturnArray: 'T array -> unit
+    }
+
+/// Performance monitoring types
+type PerformanceMetrics = {
+    FrameTime: TimeSpan
+    EventProcessingTime: TimeSpan
+    CommandGenerationTime: TimeSpan
+    BatchSize: int
+    AllocatedMemory: int64
 }

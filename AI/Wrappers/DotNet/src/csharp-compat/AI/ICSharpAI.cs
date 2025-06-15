@@ -1,11 +1,14 @@
-/// C# AI interface - compatibility layer for F# core
+/// C# AI interface - compatibility layer for F# core with data-oriented support
 using System.Numerics;
+using SpringAI.Core;
+using SpringAI.Core.DataOrientedTypes;
 
 namespace SpringAI.CSharp.AI
 {
     /// <summary>
     /// Traditional C# AI interface - this is a compatibility layer
     /// The primary API is the F# IAI interface in SpringAI.Core
+    /// Enhanced with data-oriented processing capabilities
     /// </summary>
     public interface ICSharpAI
     {
@@ -18,6 +21,11 @@ namespace SpringAI.CSharp.AI
         /// Called every game frame
         /// </summary>
         void OnUpdate(int frame);
+        
+        /// <summary>
+        /// Called with batch of events for efficient processing
+        /// </summary>
+        void OnEventBatch(GameEvent[] events);
 
         /// <summary>
         /// Called when a unit is created
@@ -38,17 +46,21 @@ namespace SpringAI.CSharp.AI
         /// Called when the AI is being shut down
         /// </summary>
         void OnRelease(int reason);
+        
+        /// <summary>
+        /// Plan actions using world state arrays for high performance
+        /// </summary>
+        Command[] PlanActionsFromWorldState(WorldState worldState);
     }
 
     /// <summary>
-    /// C# game callback interface - wraps F# IGameContext
+    /// C# game callback interface - wraps F# IGameContext with data-oriented operations
     /// </summary>
     public interface ICSharpGameCallback
     {
         /// <summary>
         /// Get current metal amount
-        /// </summary>
-        float GetMetal();
+        /// </summary>        float GetMetal();
 
         /// <summary>
         /// Get current energy amount
@@ -69,17 +81,54 @@ namespace SpringAI.CSharp.AI
         /// Get current frame number
         /// </summary>
         int GetCurrentFrame();
+        
+        /// <summary>
+        /// Get complete world state as arrays for high-performance processing
+        /// </summary>
+        WorldState GetWorldState();
+        
+        /// <summary>
+        /// Get all friendly units as compact array
+        /// </summary>
+        CompactUnit[] GetFriendlyUnitsArray();
+        
+        /// <summary>
+        /// Get enemy units in range as compact array
+        /// </summary>
+        CompactUnit[] GetEnemyUnitsArray(float range);
+        
+        /// <summary>
+        /// Spatial query for units in radius
+        /// </summary>
+        SpatialQueryResult QueryUnitsInRadius(Vector3 position, float radius);
+        
+        /// <summary>
+        /// Spatial query for units in area
+        /// </summary>
+        SpatialQueryResult QueryUnitsInArea(Vector3 min, Vector3 max);
+        
+        /// <summary>
+        /// Execute command batch efficiently
+        /// </summary>
+        BatchResult<bool> ExecuteCommandBatch(Command[] commands);
+        
+        /// <summary>
+        /// Batch building validation
+        /// </summary>
+        bool[] CanBuildAtBatch((Vector3 position, string unitDefName)[] requests);
 
         /// <summary>
         /// Get unit by ID (returns null if not found)
         /// </summary>
-        CSharpUnitInfo? GetUnit(int unitId);        /// <summary>
-        /// Get all friendly units
+        CSharpUnitInfo? GetUnit(int unitId);
+
+        /// <summary>
+        /// Get all friendly units (legacy method - use GetFriendlyUnitsArray for performance)
         /// </summary>
         List<CSharpUnitInfo> GetFriendlyUnits();
 
         /// <summary>
-        /// Get all enemy units
+        /// Get all enemy units (legacy method - use GetEnemyUnitsArray for performance)
         /// </summary>
         List<CSharpUnitInfo> GetEnemyUnits();
 

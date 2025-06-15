@@ -1,90 +1,126 @@
 # .NET AI Wrapper for RecoilEngine/Spring
 
-**F#-First AI Development Platform for Beyond All Reason (BAR)**
+**F#-First Data-Oriented AI Development Platform for Beyond All Reason (BAR)**
 
-This wrapper provides a modern, type-safe .NET interface for developing AI for the RecoilEngine (formerly Spring Engine), with a focus on the Beyond All Reason (BAR) real-time strategy game.
+This wrapper provides a modern, high-performance .NET interface for developing AI for the RecoilEngine (formerly Spring Engine). Designed with a data-oriented architecture and F#-first approach, it enables efficient batch processing and cache-friendly AI systems optimized for Beyond All Reason (BAR).
 
 ## 🎯 Key Features
 
-- **F#-First Design**: Leverages F#'s superior type system as the primary API
+- **F#-First Design**: Leverages F#'s superior type system and array processing capabilities
+- **Data-Oriented Architecture**: Arrays and batch processing for optimal performance
 - **C# Compatibility**: Full compatibility layer for C# developers
 - **Type Safety**: Units of measure prevent resource calculation bugs
-- **Null Safety**: F# options eliminate null reference exceptions
+- **Cache-Friendly**: Structured data layout optimized for modern CPU architectures
+- **Batch Processing**: Event collections and world state arrays for efficient updates
 - **Pattern Matching**: Exhaustive matching ensures all game states are handled
-- **Computation Expressions**: Clean error handling and async workflows
-- **BAR Integration**: Optimized for Beyond All Reason gameplay and data structures
+- **Zero-Allocation**: Designed to minimize GC pressure during frame processing
 
-## 🏗️ Architecture
+## 🏗️ Data-Oriented Architecture
 
 ```mermaid
 graph TB
-    subgraph "F# Core (Primary API)"
-        A[Discriminated Unions]
-        B[Units of Measure]
-        C[Computation Expressions]
-        D[Pattern Matching]
+    subgraph "F# Core (Data-Oriented)"
+        A[World State Arrays]
+        B[Event Collections]
+        C[Batch Processing]
+        D[Units of Measure]
+        E[Discriminated Unions]
     end
     
-    subgraph "C# Compatibility Layer"
-        E[Traditional OOP APIs]
-        F[Event Adapters]
-        G[Type Converters]
+    subgraph "AI Systems"
+        F[Economy System]
+        G[Military System]
+        H[Build System]
+        I[Scouting System]
     end
     
-    subgraph "Native Interop"
-        H[C++ AI Interface]
-        I[P/Invoke Layer]
+    subgraph "C# Compatibility"
+        J[OOP Event Adapters]
+        K[Traditional Interfaces]
+        L[Type Converters]
     end
     
-    A --> E
+    subgraph "Native Layer"
+        M[RecoilEngine Callbacks]
+        N[P/Invoke Interface]
+    end
+    
+    A --> F
+    A --> G
+    A --> H
+    A --> I
     B --> F
-    C --> G
-    D --> F
-    H --> I
-    I --> A
-    A --> "F# AI Applications"
-    E --> "C# AI Applications"
+    B --> G
+    B --> H
+    B --> I
+    
+    M --> N
+    N --> B
+    N --> A
+    A --> J
+    B --> J
+    J --> K
+    
+    A --> "F# Data-Oriented AI"
+    J --> "C# Traditional AI"
 ```
 
-### Why F#-First?
+### Why F#-First Data-Oriented Design?
 
-F# provides superior abstractions for game AI development:
+Real-time strategy games require high-performance AI that can process hundreds of units efficiently:
 
-- **Immutable data structures** prevent race conditions
-- **Discriminated unions** model game states more precisely than inheritance
-- **Units of measure** prevent unit conversion bugs (metal vs energy)
-- **Option types** eliminate null reference exceptions
-- **Pattern matching** creates maintainable decision trees
-- **Computation expressions** provide clean error handling
+- **Data locality**: Arrays keep related data together for better cache performance
+- **Batch processing**: Process entire arrays of units/events at once
+- **Minimal allocations**: Reuse arrays and avoid GC pressure during frames
+- **Functional composition**: F#'s array processing is highly optimized
+- **Type safety**: Units of measure and discriminated unions prevent common bugs
+- **Immutable snapshots**: Pure functions enable easy testing and debugging
 
-**C# developers still get full support** through the compatibility layer, but benefit from F#'s type safety automatically.
+**C# developers still get full support** through the compatibility layer, but benefit from F#'s optimizations automatically.
 
 ## 🚀 Quick Start
 
-### F# Development (Recommended)
+### F# Data-Oriented Development (Recommended)
 
 ```fsharp
 open SpringAI.Core
 
-type MyAI(context: IGameContext) =
-    inherit BaseFSharpAI(context)
+type DataOrientedAI() =
+    // Mutable arrays for performance
+    let mutable worldState = WorldSnapshot.empty
+    let mutable economyTargets: EconomyTarget[] = [||]
+    let eventBuffer = ResizeArray<GameEvent>()
     
-    override this.CreateBuildPlan resourceState =
-        aiDecision {
-            let! builders = this.GetAvailableBuilders()
-            match resourceState with
-            | ResourceRich when List.length builders > 0 ->
-                let builder = builders.[0]
-                let! location = this.FindBuildLocation(builder.Position)
-                return [{ Action = Build(builder.Id, "armlab", location)
-                         Priority = 8
-                         Reason = "Tech advancement"
-                         EstimatedDuration = Some 300<frame> }]
-            | _ -> return []
-        }
+    interface IAI with
+        member this.OnEvent(event) =
+            // Buffer events for batch processing
+            eventBuffer.Add(convertToFSharpEvent event)
+        
+        member this.OnUpdate(frame) =
+            // Batch process all events for this frame
+            let frameEvents = this.ProcessEventBuffer(frame)
+            
+            // Update world state with efficient array operations
+            worldState <- this.UpdateWorldState(worldState, frameEvents)
+            
+            // Run AI systems on batched data
+            this.RunEconomySystem(worldState, frameEvents)
+            this.RunMilitarySystem(worldState, frameEvents)
+            
+            eventBuffer.Clear()
+    
+    member private this.RunEconomySystem(world: WorldSnapshot, events: FrameEvents) =
+        // Process idle builders in batch
+        let idleBuilders = 
+            events.UnitsIdle
+            |> Array.filter (fun unitId -> this.IsBuilder(world.Units.[unitId]))
+        
+        // Assign construction tasks efficiently
+        let tasks = this.PlanConstruction(world, idleBuilders)
+        tasks |> Array.iter this.IssueConstructionOrder
 ```
 
-### C# Development (Compatibility)
+### C# Traditional Development (Compatibility)
 
 ```csharp
 using SpringAI.CSharp.AI;

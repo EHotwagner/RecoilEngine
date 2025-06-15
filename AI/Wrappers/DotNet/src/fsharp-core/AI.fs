@@ -1,16 +1,24 @@
-/// F#-first AI interface and implementations
+/// F#-first AI interface and implementations with data-oriented processing
 namespace SpringAI.Core
 
 open System
 open ActivePatterns
+open DataOrientedTypes
+open DataOrientedProcessing
 
-/// Primary F# AI interface
+/// Primary F# AI interface optimized for data-oriented processing
 type IAI =
     /// Handle game events using F# discriminated unions
     abstract member HandleEvent: GameEvent -> unit
     
+    /// Handle event batches for efficient processing
+    abstract member HandleEventBatch: EventBatch -> unit
+    
     /// Plan next actions based on current state
     abstract member PlanActions: ResourceState -> Decision<Command> list
+    
+    /// Plan actions using world state arrays for efficiency
+    abstract member PlanActionsFromWorldState: WorldState -> CommandBatch
     
     /// Initialize AI with game context
     abstract member Initialize: IGameContext -> unit
@@ -20,33 +28,52 @@ type IAI =
     
     /// Get current AI strategy
     abstract member GetStrategy: unit -> Strategy
+    
+    /// Update AI strategy based on data analysis
+    abstract member UpdateStrategy: WorldState -> unit
 
-/// Base F# AI implementation with common functionality
+/// Base F# AI implementation with data-oriented processing capabilities
 [<AbstractClass>]
 type BaseFSharpAI(context: IGameContext) =
     let mutable currentStrategy = EconomicExpansion
     let mutable gameState = context.GetResources()
+    let mutable worldState = context.GetWorldState()
+    let mutable spatialGrid = DataOrientedProcessing.buildSpatialGrid [||] 100.0f<elmo>
     
-    /// Update internal state
+    /// Update internal state using efficient array operations
     member this.UpdateState() =
         gameState <- context.GetResources()
+        worldState <- context.GetWorldState()
+        // Rebuild spatial grid for efficient queries
+        let units = context.GetFriendlyUnitsArray()
+        spatialGrid <- DataOrientedProcessing.buildSpatialGrid units 100.0f<elmo>
     
     /// Get current game state
     member this.GameState = gameState
     
+    /// Get world state arrays
+    member this.WorldState = worldState
+    
+    /// Get spatial grid for efficient queries
+    member this.SpatialGrid = spatialGrid
+    
     /// Get game context
     member this.Context = context
     
-    /// Strategy selection using F# pattern matching
+    /// Strategy selection using F# pattern matching and data analysis
     member this.SelectStrategy() =
-        match gameState.CurrentFrame, gameState with
-        | EarlyGame, ResourcePoor -> EconomicExpansion
-        | EarlyGame, ResourceModerate -> EconomicExpansion
-        | MidGame, ResourceRich -> MilitaryBuildup
-        | LateGame, _ -> TechAdvancement
-        | _, _ -> DefensivePosition
+        let metrics = context.GetPerformanceMetrics()
+        let units = context.GetFriendlyUnitsArray()
+        let unitCount = units.Length
+        
+        match gameState.CurrentFrame, gameState, unitCount with
+        | EarlyGame, ResourcePoor, count when count < 10 -> EconomicExpansion
+        | EarlyGame, ResourceModerate, _ -> EconomicExpansion
+        | MidGame, ResourceRich, count when count > 50 -> MilitaryBuildup
+        | LateGame, _, _ -> TechAdvancement
+        | _, _, _ -> DefensivePosition
     
-    /// Abstract methods for derived classes
+    /// Abstract methods for derived classes with data-oriented signatures
     abstract member ProcessGameStart: int * bool -> unit
     abstract member ProcessFrameUpdate: int<frame> -> unit
     abstract member ProcessUnitCreated: int * int -> unit
@@ -54,8 +81,22 @@ type BaseFSharpAI(context: IGameContext) =
     abstract member ProcessUnitDestroyed: int * int -> unit
     abstract member ProcessGameEnd: int -> unit
     abstract member CreateBuildPlan: ResourceState -> Decision<Command> list
+    abstract member CreateBuildPlanFromWorldState: WorldState -> CommandBatch
     
-    /// Default implementations
+    /// Data-oriented event batch processing
+    member this.ProcessEventBatch(eventBatch: EventBatch) =
+        // Process events in batches for efficiency
+        DataOrientedProcessing.processEventBatch eventBatch.Events this.ProcessSingleEvent
+    
+    member private this.ProcessSingleEvent(event: GameEvent) =
+        match event with
+        | GameStarted(aiId, savedGame) -> this.ProcessGameStart(aiId, savedGame)
+        | FrameUpdate(frame) -> this.ProcessFrameUpdate(frame)
+        | UnitCreated(unitId, builderId, _) -> this.ProcessUnitCreated(unitId, builderId)
+        | UnitDamaged(unitId, attackerId, damage, _) -> this.ProcessUnitDamaged(unitId, attackerId, damage)
+        | UnitDestroyed(unitId, attackerId, _) -> this.ProcessUnitDestroyed(unitId, attackerId)
+        | GameEnded(reason) -> this.ProcessGameEnd(reason)
+      /// Default implementations
     default this.ProcessGameStart(aiId, savedGame) = 
         printfn "F# AI %d started (saved: %b)" aiId savedGame
     
@@ -74,20 +115,43 @@ type BaseFSharpAI(context: IGameContext) =
     
     default this.ProcessGameEnd(reason) = 
         printfn "Game ended with reason: %d" reason
-      interface IAI with
+    
+    default this.CreateBuildPlanFromWorldState(worldState: WorldState) : CommandBatch =
+        // Default implementation creates empty batch
+        {
+            Commands = [||]
+            CommandCount = 0
+            Priority = [||]
+            FrameToExecute = [||]
+        }
+    
+    interface IAI with
         member this.HandleEvent event =
-            match event with
-            | GameStarted(aiId, savedGame) -> this.ProcessGameStart(aiId, savedGame)
-            | FrameUpdate(frame) -> this.ProcessFrameUpdate(frame)
-            | UnitCreated(unitId, builderId, frame) -> this.ProcessUnitCreated(unitId, builderId)
-            | UnitDamaged(unitId, attackerId, damage, frame) -> this.ProcessUnitDamaged(unitId, attackerId, damage)
-            | UnitDestroyed(unitId, attackerId, frame) -> this.ProcessUnitDestroyed(unitId, attackerId)
-            | GameEnded(reason) -> this.ProcessGameEnd(reason)
+            this.ProcessSingleEvent(event)
         
-        member this.PlanActions resourceState = this.CreateBuildPlan(resourceState)
+        member this.HandleEventBatch eventBatch =
+            this.ProcessEventBatch(eventBatch)
+        
+        member this.PlanActions resourceState = 
+            this.CreateBuildPlan(resourceState)
+        
+        member this.PlanActionsFromWorldState worldState =
+            this.CreateBuildPlanFromWorldState(worldState)
+        
         member this.Initialize(context) = ()  // Override in derived classes
         member this.Shutdown(reason) = this.ProcessGameEnd(reason)
         member this.GetStrategy() = currentStrategy
+        
+        member this.UpdateStrategy(worldState) =
+            // Analyze world state and update strategy
+            let unitCounts = worldState.UnitIds.Length
+            let resourceRatio = float32 gameState.Metal / float32 gameState.Energy
+            
+            currentStrategy <- 
+                match unitCounts, resourceRatio with
+                | count, _ when count < 10 -> EconomicExpansion
+                | count, ratio when count > 50 && ratio > 2.0f -> MilitaryBuildup
+                | _ -> currentStrategy
 
 /// Computation expression for AI decision making
 type AIDecisionBuilder() =
@@ -107,28 +171,151 @@ type AIDecisionBuilder() =
 /// Global AI decision computation expression
 let aiDecision = AIDecisionBuilder()
 
-/// F# modules for common AI operations
+/// F# modules for data-oriented AI operations
 module AICommands =
     /// Execute a command safely
     let execute (context: IGameContext) command =
         context.ExecuteCommand command
     
-    /// Execute multiple commands
-    let executeMany (context: IGameContext) commands =
-        commands 
-        |> List.map (context.ExecuteCommand)
-        |> List.fold (fun acc result -> 
-            match acc, result with
-            | Ok messages, Ok msg -> Ok (msg :: messages)
-            | Error err, _ -> Error err
-            | _, Error err -> Error err) (Ok [])
+    /// Execute command batch efficiently
+    let executeBatch (context: IGameContext) (commandBatch: CommandBatch) =
+        context.ExecuteCommandBatch commandBatch
     
-    /// Build command with validation
+    /// Build command with validation using spatial data
     let buildAt (context: IGameContext) builderId unitDefName position =
         if context.CanBuildAt(position, unitDefName) then
             Ok (Build(builderId, unitDefName, position))
         else
             Error $"Cannot build {unitDefName} at {position}"
+    
+    /// Batch build validation for multiple positions
+    let buildAtBatch (context: IGameContext) (requests: (int * string * Vector3) array) =
+        let positions = requests |> Array.map (fun (_, unitDef, pos) -> (pos, unitDef))
+        let validations = context.CanBuildAtBatch(positions)
+        
+        Array.zip3 requests validations [|0..requests.Length-1|]
+        |> Array.choose (fun ((builderId, unitDefName, position), isValid, _) ->
+            if isValid then Some (Build(builderId, unitDefName, position))
+            else None)
+
+module DataOrientedAI =
+    /// Analyze unit distribution using arrays
+    let analyzeUnitDistribution (worldState: WorldState) : Map<BARFaction, int> =
+        worldState.UnitFactions
+        |> Array.countBy id
+        |> Map.ofArray
+    
+    /// Calculate threat assessment using spatial data
+    let calculateThreatAssessment (worldState: WorldState) (position: Vector3) (radius: float32<elmo>) : ThreatAssessment =
+        let threats = 
+            Array.zip3 worldState.UnitPositions worldState.UnitFactions worldState.UnitHealth
+            |> Array.filter (fun (pos, faction, health) ->
+                health > 0.0f &&
+                faction <> ARM &&  // Assume we're ARM
+                Vector3.Distance(pos, position) <= float32 radius)
+        
+        let threatCount = threats.Length
+        let avgDistance = 
+            if threatCount > 0 then
+                threats 
+                |> Array.map (fun (pos, _, _) -> Vector3.Distance(pos, position))
+                |> Array.average
+            else
+                System.Single.MaxValue
+        
+        {
+            Level = match threatCount with
+                    | 0 -> ThreatLevel.None
+                    | count when count < 3 -> ThreatLevel.Low
+                    | count when count < 10 -> ThreatLevel.Medium
+                    | _ -> ThreatLevel.High
+            Source = if threatCount > 0 then Some position else None
+            Distance = avgDistance * 1.0f<elmo>
+            EstimatedDamage = float32 threatCount * 10.0f<dps>
+            UnitCount = threatCount
+        }
+    
+    /// Efficient resource optimization using array operations
+    let optimizeResourceAllocation (worldState: WorldState) (metalBudget: float32<metal>) (energyBudget: float32<energy>) =
+        // Analyze current production vs consumption
+        let myUnits = 
+            Array.zip worldState.UnitIds worldState.UnitFactions
+            |> Array.filter (fun (_, faction) -> faction = ARM)
+            |> Array.map fst
+        
+        // Calculate optimal resource allocation
+        let metalProducers = myUnits |> Array.filter (fun _ -> true) // Simplified
+        let energyProducers = myUnits |> Array.filter (fun _ -> true) // Simplified
+        
+        // Return optimization recommendations
+        [
+            if metalProducers.Length < 5 then
+                yield ("build_metal_extractor", 80.0f<metal>, 0.0f<energy>)
+            if energyProducers.Length < 10 then
+                yield ("build_solar_collector", 50.0f<metal>, 0.0f<energy>)
+        ]
+    
+    /// Batch pathfinding for multiple units
+    let planMovementsBatch (worldState: WorldState) (moves: (int * Vector3) array) : (int * Vector3 list) array =
+        // Simplified batch pathfinding
+        moves |> Array.map (fun (unitId, destination) ->
+            let unitIndex = Array.findIndex ((=) unitId) worldState.UnitIds
+            let currentPos = worldState.UnitPositions.[unitIndex]
+            let path = [currentPos; destination] // Simplified straight-line path
+            (unitId, path))
+
+/// High-performance F# AI using data-oriented patterns
+type DataOrientedFSharpAI(context: IGameContext) =
+    inherit BaseFSharpAI(context)
+    
+    let mutable performanceMetrics = context.GetPerformanceMetrics()
+    let mutable frameCounter = 0
+    
+    override this.ProcessFrameUpdate(frame) =
+        base.ProcessFrameUpdate(frame)
+        frameCounter <- frameCounter + 1
+        
+        // Update performance metrics every 30 frames
+        if frameCounter % 30 = 0 then
+            performanceMetrics <- context.GetPerformanceMetrics()
+    
+    override this.CreateBuildPlanFromWorldState(worldState: WorldState) : CommandBatch =
+        let builders = 
+            DataOrientedProcessing.filterUnitsByFlags worldState 0b00000001uy // Builder flag
+        
+        if Array.isEmpty builders then
+            { Commands = [||]; CommandCount = 0; Priority = [||]; FrameToExecute = [||] }
+        else
+            let buildCommands = 
+                builders 
+                |> Array.take (min 5 builders.Length)  // Limit to 5 builders
+                |> Array.map (fun builderId ->
+                    let builderIndex = Array.findIndex ((=) builderId) worldState.UnitIds
+                    let builderPos = worldState.UnitPositions.[builderIndex]
+                    Build(builderId, "armsolar", builderPos))
+            
+            {
+                Commands = buildCommands
+                CommandCount = buildCommands.Length
+                Priority = Array.create buildCommands.Length 5
+                FrameToExecute = Array.create buildCommands.Length worldState.CurrentFrame
+            }
+    
+    override this.CreateBuildPlan(resourceState: ResourceState) : Decision<Command> list =
+        // Legacy method - delegate to world state version
+        let worldState = context.GetWorldState()
+        let commandBatch = this.CreateBuildPlanFromWorldState(worldState)
+        
+        commandBatch.Commands
+        |> Array.toList
+        |> List.map (fun command ->
+            {
+                Action = command
+                Priority = 5
+                Reason = "Data-oriented build plan"
+                RequiredResources = Some resourceState
+                EstimatedDuration = Some 300<frame>
+            })
 
 module AIStrategy =
     /// Determine game phase based on frame and resources

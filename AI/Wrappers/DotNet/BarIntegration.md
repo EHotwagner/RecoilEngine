@@ -1,81 +1,105 @@
-# Beyond All Reason (BAR) Integration Architecture
+# Beyond All Reason (BAR) Integration for Data-Oriented AI
 
 ## Overview
 
-Beyond All Reason (BAR) is a complete Real-Time Strategy game built on top of the RecoilEngine (Spring). This document details how BAR integrates with the general Spring engine interface and how AI implementations can access and utilize BAR-specific game data through the standardized AI interface.
+Beyond All Reason (BAR) is a complete Real-Time Strategy game built on top of the RecoilEngine (Spring). This document details how BAR integrates with our **data-oriented .NET AI wrapper**, focusing on efficient, array-based processing of BAR's extensive unit and game data for high-performance AI development.
 
-## BAR Architecture Overview
+## BAR Data-Oriented Architecture
 
 ```mermaid
 graph TB
-    subgraph "BAR Game Architecture"
-        BarMod[BAR Game Mod] --> SpringEngine[RecoilEngine/Spring]
+    subgraph "BAR Game Engine"
+        BarMod[BAR Game Mod<br/>~200 Unit Types] --> SpringEngine[RecoilEngine/Spring<br/>30Hz Simulation]
         SpringEngine --> AIInterface[AI Interface Layer]
-        AIInterface --> DotNetWrapper[.NET AI Wrapper]
-        DotNetWrapper --> AIImplementation[BAR AI Implementation]
-        
-        subgraph "BAR Game Content"
-            ModInfo[modinfo.lua<br/>Game Metadata]
-            UnitDefs[Unit Definitions<br/>units/]
-            WeaponDefs[Weapon Definitions<br/>weapons/]
-            GameData[Game Rules<br/>gamedata/]
-            LuaRules[Game Logic<br/>luarules/]
-        end
-        
-        subgraph "BAR Data Access"
-            EngineCallbacks[Engine Callbacks]
-            UnitQueries[Unit Information]
-            MapData[Map Information]
-            GameState[Game State]
-        end
-        
-        BarMod --> ModInfo
-        BarMod --> UnitDefs
-        BarMod --> WeaponDefs
-        BarMod --> GameData
-        BarMod --> LuaRules
-        
-        AIInterface --> EngineCallbacks
-        AIInterface --> UnitQueries
-        AIInterface --> MapData
-        AIInterface --> GameState
+        AIInterface --> DataWrapper[Data-Oriented .NET Wrapper]
+        DataWrapper --> ArrayProcessor[F# Array Processor<br/>Cache-Optimized]
+        ArrayProcessor --> AIImplementation[High-Performance BAR AI]
     end
+    
+    subgraph "Static Game Data (Definition Arrays)"
+        UnitDefs[Unit Definition Arrays<br/>~200 Unit Types<br/>Cost, Health, Speed, etc.]
+        WeaponDefs[Weapon Definition Arrays<br/>~150 Weapon Types<br/>Damage, Range, Rate]
+        MoveDefs[Movement Arrays<br/>Tank, Kbot, Aircraft, Ship]
+        FeatureDefs[Feature Arrays<br/>Metal Spots, Geo Vents]
+    end
+    
+    subgraph "Dynamic Runtime Arrays (Structure-of-Arrays)"
+        UnitArrays[Unit State Arrays<br/>int[] ids, Vector3[] positions<br/>float[] health, byte[] states]
+        ResourceArrays[Resource Arrays<br/>float[] metal, energy<br/>float[] income, storage]
+        MapArrays[Map Data Arrays<br/>float[] heightmap<br/>float[] metalmap]
+        SpatialArrays[Spatial Index Arrays<br/>Grid-based partitioning<br/>O(1) neighbor queries]
+        EventArrays[Event Collections<br/>Batched by frame<br/>GameEvent[] arrays]
+    end
+    
+    BarMod --> UnitDefs
+    BarMod --> WeaponDefs
+    BarMod --> MoveDefs
+    BarMod --> FeatureDefs
+    
+    DataWrapper --> UnitArrays
+    DataWrapper --> ResourceArrays
+    DataWrapper --> MapArrays
+    DataWrapper --> SpatialArrays
+    DataWrapper --> EventArrays
+    
+    ArrayProcessor --> UnitDefs
+    ArrayProcessor --> UnitArrays
+    ArrayProcessor --> ResourceArrays
+    ArrayProcessor --> SpatialArrays
+    ArrayProcessor --> EventArrays
 ```
 
-## BAR Game Structure
+## High-Performance Data Access Patterns
 
-### Core Components
+### Structure-of-Arrays (SOA) for Cache Optimization
 
-BAR follows the standard Spring engine structure but extends it with comprehensive game content:
+BAR AI performance is critical due to high unit counts. Our wrapper uses SOA layout:
 
-```
-BAR.sdd/                          # Game root directory
-├── modinfo.lua                   # Game metadata and version
-├── gamedata/                     # Core game rules and definitions
-│   ├── defs.lua                  # Master definitions loader
-│   ├── unitdefs.lua              # Unit definition processing
-│   ├── weapondefs.lua            # Weapon definition processing
-│   ├── modrules.lua              # Game rule modifications
-│   └── sidedata.lua              # Faction definitions
-├── units/                        # Individual unit definitions
-│   ├── armcom.lua                # ARM Commander
-│   ├── armkbot.lua               # ARM Construction Kbot
-│   ├── armveh.lua                # ARM Vehicle Constructor
-│   └── ...                      # Hundreds of unit files
-├── weapons/                      # Weapon definitions
-├── luarules/                     # Server-side game logic
-│   ├── gadgets/                  # Game behavior modules
-│   └── configs/                  # Configuration files
-├── luaui/                        # Client-side interface
-├── objects3d/                    # 3D models
-├── sounds/                       # Audio files
-├── bitmaps/                      # Textures and images
-└── scripts/                      # Unit behavior scripts
+```fsharp
+// Traditional AOS (Array of Structures) - Poor cache performance
+type Unit = { Id: int; Position: Vector3; Health: float32; MaxHealth: float32 }
+let units: Unit[] = [| ... |]  // Scattered memory access
+
+// Data-Oriented SOA (Structure of Arrays) - Optimal cache performance  
+type WorldState = {
+    UnitIds: int[]           // All unit IDs together
+    UnitPositions: Vector3[] // All positions together
+    UnitHealth: float32[]    // All health values together
+    UnitMaxHealth: float32[] // All max health values together
+    UnitDefIds: int16[]      // Compact unit type IDs
+    UnitStates: byte[]       // Packed state flags
+}
 ```
 
-### Data Flow Architecture
+### Efficient BAR Unit Processing
 
-```mermaid
+```fsharp
+/// Process all units efficiently using array operations
+let processAllUnitsHealth (worldState: WorldState) : (int * float32)[] =
+    // Calculate health percentages for all units in parallel
+    Array.map2 (fun health maxHealth -> 
+        if maxHealth > 0.0f then health / maxHealth else 0.0f
+    ) worldState.UnitHealth worldState.UnitMaxHealth
+    |> Array.zip worldState.UnitIds
+    |> Array.filter (fun (_, healthPercent) -> healthPercent < 0.3f) // Critical units
+
+/// Find nearby enemies using spatial grid
+let findNearbyEnemies (spatialGrid: SpatialGrid) (position: Vector3) (radius: float32) : int[] =
+    // O(1) spatial lookup instead of O(n) linear search
+    let cellX = int (position.X / float32 spatialGrid.CellSize)
+    let cellZ = int (position.Z / float32 spatialGrid.CellSize)
+    let cellRadius = int (radius / float32 spatialGrid.CellSize) + 1
+    
+    [| for x in cellX - cellRadius .. cellX + cellRadius do
+       for z in cellZ - cellRadius .. cellZ + cellRadius do
+           let cellIndex = z * spatialGrid.GridSize + x
+           if cellIndex >= 0 && cellIndex < spatialGrid.UnitCells.Length then
+               yield! spatialGrid.UnitCells.[cellIndex] |]
+```
+
+## BAR Game Content Structure for AI Access
+
+### Optimized Directory Layout for Data Loading
 sequenceDiagram
     participant Engine as RecoilEngine
     participant BAR as BAR Game
