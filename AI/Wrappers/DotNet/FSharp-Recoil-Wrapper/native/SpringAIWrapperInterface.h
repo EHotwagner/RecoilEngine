@@ -1,76 +1,71 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#ifndef DOTNET_INTERFACE_H
-#define DOTNET_INTERFACE_H
+#ifndef SPRING_AI_WRAPPER_INTERFACE_H
+#define SPRING_AI_WRAPPER_INTERFACE_H
 
-#include "ExternalAI/Interface/SSkirmishAILibrary.h"
-#include "ExternalAI/Interface/SAIInterfaceCallback.h"
-#include "CUtils/SharedLibrary.h"
+#ifdef _WIN32
+    #define EXPORT __declspec(dllexport)
+#else
+    #define EXPORT __attribute__((visibility("default")))
+#endif
 
-#include <map>
-#include <string>
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-/**
- * @brief .NET AI Interface
- * 
- * This class manages .NET AI instances and handles the bridge between
- * the C AI interface and .NET managed code.
- */
-class CDotNetInterface {
-public:
-    CDotNetInterface(int interfaceId, const SAIInterfaceCallback* callback);
-    ~CDotNetInterface();
+// Data structures for F# interop
+typedef struct {
+    int id;
+    int defId;
+    float x, y, z;              // Position
+    float health;
+    float maxHealth;
+    int teamId;
+    int state;                  // UnitState enum value
+} Unit;
 
-    // AI library management
-    const SSkirmishAILibrary* LoadSkirmishAILibrary(
-        const char* const shortName,
-        const char* const version
-    );
-    
-    int UnloadSkirmishAILibrary(
-        const char* const shortName,
-        const char* const version
-    );
-    
-    int UnloadAllSkirmishAILibraries();
+typedef struct {
+    float metal;
+    float energy;
+    float metalStorage;
+    float energyStorage;
+    float metalIncome;
+    float energyIncome;
+    int currentFrame;
+} ResourceState;
 
-    // Static callback functions for the C interface
-    static int HandleEvent(int skirmishAIId, int topicId, const void* data);
-    static int InitAI(int skirmishAIId, const struct SSkirmishAICallback* callback);
-    static int ReleaseAI(int skirmishAIId);
+typedef struct {
+    int commandType;            // Command type enum
+    int unitId;                 // Unit to command (for Move, Attack, etc.)
+    int targetUnitId;           // Target unit (for Attack, Repair, etc.)
+    float x, y, z;              // Position (for Move, Build, etc.)
+    char buildUnitName[64];     // Unit type to build
+    int priority;
+} Command;
 
-private:
-    struct AIInfo {
-        std::string shortName;
-        std::string version;
-        std::string assemblyPath;
-        void* dotnetHandle;  // Handle to .NET AI instance
-    };
+// Core array filling functions - these are the main interface points
+EXPORT int FillUnitArray(Unit* units, int maxCount);
+EXPORT int FillResourceState(ResourceState* resources);
+EXPORT int ExecuteCommandBatch(const Command* commands, int commandCount);
 
-    // Instance management
-    int LoadDotNetRuntime();
-    int UnloadDotNetRuntime();
-    int CreateAIInstance(int skirmishAIId, const std::string& shortName, const std::string& version);
-    int DestroyAIInstance(int skirmishAIId);
+// Basic information queries
+EXPORT int GetUnitCount();
+EXPORT float GetMetal();
+EXPORT float GetEnergy();
+EXPORT int GetCurrentFrame();
 
-    // Helper functions
-    std::string FindAIAssembly(const std::string& shortName, const std::string& version);
-    void ReportError(const std::string& msg);
+// Spatial queries for efficient AI processing  
+EXPORT int GetUnitsInRadius(const Unit* allUnits, int unitCount, 
+                           float centerX, float centerY, float centerZ, 
+                           float radius, int* resultIds, int maxResults);
 
-    // Data members
-    const int interfaceId;
-    const SAIInterfaceCallback* callback;
-    
-    std::map<int, AIInfo> loadedAIs;  // skirmishAIId -> AI info
-    static CDotNetInterface* instance;  // Singleton for static callbacks
-    
-    bool dotnetRuntimeLoaded;
-    void* dotnetRuntimeHandle;
-};
+// Map information
+EXPORT float GetMapWidth();
+EXPORT float GetMapHeight();
+EXPORT bool IsPositionValid(float x, float y, float z);
 
-// Function pointer types for .NET interop
-typedef int (*DotNetInit_t)(int skirmishAIId, const char* assemblyPath, const struct SSkirmishAICallback* callback);
-typedef int (*DotNetRelease_t)(int skirmishAIId);
-typedef int (*DotNetHandleEvent_t)(int skirmishAIId, int topicId, const void* data);
+#ifdef __cplusplus
+}
+#endif
 
-#endif // DOTNET_INTERFACE_H
+#endif // SPRING_AI_WRAPPER_INTERFACE_H

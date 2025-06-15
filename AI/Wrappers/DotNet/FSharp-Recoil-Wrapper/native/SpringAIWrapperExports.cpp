@@ -1,53 +1,66 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
 #include "SpringAIWrapperInterface.h"
-#include "ExternalAI/Interface/aidefines.h"
-#include "ExternalAI/Interface/SAIInterfaceLibrary.h"
-#include "ExternalAI/Interface/ELevelOfSupport.h"
 
-#include <memory>
-
-// check if the correct defines are set by the build system
-#if !defined BUILDING_AI_INTERFACE
-#	error BUILDING_AI_INTERFACE should be defined when building AI Interfaces
-#endif
-#if !defined BUILDING_AI
-#	error BUILDING_AI should be defined when building AI Interfaces
-#endif
-#if defined BUILDING_SKIRMISH_AI
-#	error BUILDING_SKIRMISH_AI should not be defined when building AI Interfaces
-#endif
-
-static std::unique_ptr<CDotNetInterface> g_interface;
+// Simple exports for F# P/Invoke - no complex AI interface management needed
+// This is a minimal stub library for testing the data-oriented architecture
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// Static AI interface library functions
-EXPORT(int) initStatic(int interfaceId, const struct SAIInterfaceCallback* callback) {
-    if (g_interface) {
-        return -1;  // Already initialized
-    }
+// Re-export the core functions for P/Invoke
+// These will be called directly from F# code
 
-    try {
-        g_interface = std::make_unique<CDotNetInterface>(interfaceId, callback);
-        return 0;
-    } catch (...) {
-        return -2;  // Initialization failed
-    }
+EXPORT int GetUnitCount_Export() {
+    return GetUnitCount();
 }
 
-EXPORT(int) releaseStatic() {
-    if (!g_interface) {
-        return -1;  // Not initialized
-    }
-
-    g_interface.reset();
-    return 0;
+EXPORT int FillUnitArray_Export(Unit* units, int maxCount) {
+    return FillUnitArray(units, maxCount);
 }
 
-EXPORT(enum LevelOfSupport) getLevelOfSupportFor(
+EXPORT int FillResourceState_Export(ResourceState* resources) {
+    return FillResourceState(resources);
+}
+
+EXPORT int ExecuteCommandBatch_Export(const Command* commands, int commandCount) {
+    return ExecuteCommandBatch(commands, commandCount);
+}
+
+EXPORT float GetMetal_Export() {
+    return GetMetal();
+}
+
+EXPORT float GetEnergy_Export() {
+    return GetEnergy();
+}
+
+EXPORT int GetCurrentFrame_Export() {
+    return GetCurrentFrame();
+}
+
+EXPORT int GetUnitsInRadius_Export(const Unit* allUnits, int unitCount, 
+                                  float centerX, float centerY, float centerZ, 
+                                  float radius, int* resultIds, int maxResults) {
+    return GetUnitsInRadius(allUnits, unitCount, centerX, centerY, centerZ, radius, resultIds, maxResults);
+}
+
+EXPORT float GetMapWidth_Export() {
+    return GetMapWidth();
+}
+
+EXPORT float GetMapHeight_Export() {
+    return GetMapHeight();
+}
+
+EXPORT bool IsPositionValid_Export(float x, float y, float z) {
+    return IsPositionValid(x, y, z);
+}
+
+#ifdef __cplusplus
+}
+#endif
     const char* engineVersionString, 
     int engineVersionNumber,
     const char* aiInterfaceShortName, 
