@@ -426,3 +426,25 @@ To contribute to the .NET wrapper development:
 ## License
 
 This wrapper follows the same licensing as the RecoilEngine project (GPL v2 or later).
+
+## How RecoilEngine/Spring Delivers Events
+
+Based on analysis of the RecoilEngine source code, the event delivery model is:
+
+1. **Frame-based simulation loop**: RecoilEngine runs at 30 simulation frames per second (GAME_SPEED = 30)
+2. **Event callbacks are immediate**: When events occur within a simulation frame, they are delivered immediately via callbacks (not batched)
+3. **OnUpdate called every frame**: The Update event is sent once per simulation frame (30 times per second)
+4. **No event streaming or batching**: Events like UnitCreated, UnitDestroyed, etc. are delivered as individual callbacks when they occur
+
+**Timing and Order**:
+- Each simulation frame: `CGame::SimFrame()` is called
+- During simulation: Events occur and callbacks are triggered immediately
+- At frame end: `Update(frameNum)` is called on all AIs
+- Events are **not** queued or batched - they arrive as soon as they happen within the frame
+
+This means your AI will receive:
+```
+OnUpdate(frame=1) -> UnitCreated(id=5) -> UnitDestroyed(id=3) -> ... -> OnUpdate(frame=2) -> ...
+```
+
+The F#-first wrapper maintains this immediate callback model while providing additional safety and functional programming benefits.

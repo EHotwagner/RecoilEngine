@@ -1009,106 +1009,270 @@ let addUnit newUnit state =
     Optic.map unitsLens (fun units -> newUnit :: units) state
 ```
 
-## Performance Optimizations for F#
+## Data-Oriented AI Design Patterns
 
-### 1. Memoization for Expensive Calculations
+For high-performance game AI, a data-oriented approach is highly recommended. F# excels at this due to its immutable data structures, array processing capabilities, and functional composition.
 
-```fsharp
-// Memoization for expensive AI calculations
-let memoize f =
-    let cache = System.Collections.Concurrent.ConcurrentDictionary<_, _>()
-    fun x -> cache.GetOrAdd(x, f)
+### Core Data-Oriented Architecture
 
-// Memoized path finding
-let findPathMemoized = memoize (fun (start, target) ->
-    // Expensive pathfinding calculation
-    calculatePath start target)
+#### World State Arrays
 
-// Usage
-let path = findPathMemoized (unitPos, targetPos)
-```
-
-### 2. Struct Records for High-Performance Scenarios
+Instead of object-oriented entity management, maintain typed arrays for different aspects of the world state:
 
 ```fsharp
-// Use struct records for frequently allocated types
-[<Struct>]
-type UnitStats = {
-    Health: float32
-    MaxHealth: float32
-    Damage: float32
-    Range: float32
+// Core world state with frame-based snapshots
+type WorldSnapshot = {
+    Frame: int<frame>
+    Timestamp: DateTime
+    
+    // Unit arrays indexed by UnitId
+    Units: Map<int, UnitData>
+    UnitPositions: Vector3[]
+    UnitHealths: float32[]
+    UnitTypes: UnitDefId[]
+    UnitStates: UnitState[]
+    
+    // Resource state
+    Resources: ResourceState
+    
+    // Team/ally information
+    MyTeam: int
+    MyAllyTeam: int
+    Teams: TeamData[]
+    
+    // Map information (cached/static)
+    MapWidth: int<elmo>
+    MapHeight: int<elmo>
+    MetalSpots: Vector3[]
 }
 
-// Avoid heap allocation for performance-critical paths
-let calculateThreat (stats: UnitStats) distance =
-    let effectiveness = stats.Damage / max 1.0f distance
-    effectiveness * (stats.Health / stats.MaxHealth)
+// Efficient unit data with value types
+[<Struct>]
+type UnitData = {
+    Id: int
+    DefId: UnitDefId
+    Team: int
+    Position: Vector3
+    Health: float32
+    MaxHealth: float32
+    IsBeingBuilt: bool
+    BuildProgress: float32
+}
+
+// Unit states as discriminated union
+type UnitState =
+    | Idle
+    | Moving of target: Vector3
+    | Building of targetDefId: UnitDefId * position: Vector3
+    | Attacking of targetId: int
+    | Dead
 ```
 
-## Advanced Testing Patterns
+#### Event Collection Arrays
 
-### 1. Property-Based Testing with FsCheck
+Collect events by type in arrays for batch processing:
 
 ```fsharp
-open FsCheck
-open FsCheck.Xunit
-
-// Property-based testing for AI behavior
-[<Property>]
-let ``AI should never exceed resource limits`` (metalAmount: NonNegativeInt) (energyAmount: NonNegativeInt) =
-    let ai = TestableAI()
-    let mockCallback = createMockCallback metalAmount.Get energyAmount.Get
+// Frame-based event collections
+type FrameEvents = {
+    Frame: int<frame>
     
-    ai.SetCallback(mockCallback)
-    ai.ProcessFrame()
+    // Event arrays for efficient batch processing
+    UnitsCreated: UnitCreatedData[]
+    UnitsDestroyed: UnitDestroyedData[]
+    UnitsDamaged: UnitDamagedData[]
+    UnitsIdle: int[]  // Just unit IDs
+    EnemiesSpotted: int[]
+    EnemiesLost: int[]
     
-    // Property: AI should never issue commands that exceed available resources
-    let commandCost = ai.GetPendingCommands() |> List.sumBy (fun cmd -> cmd.MetalCost + cmd.EnergyCost)
-    commandCost <= float32 (metalAmount.Get + energyAmount.Get)
+    // Resource events
+    ResourceUpdates: ResourceState option
+}
 
-[<Property>]
-let ``Unit classification is consistent`` (unitDef: UnitDef) =
-    let classification1 = classifyUnit unitDef
-    let classification2 = classifyUnit unitDef
-    classification1 = classification2
+[<Struct>]
+type UnitCreatedData = {
+    UnitId: int
+    BuilderId: int
+    DefId: UnitDefId
+    Position: Vector3
+    Team: int
+}
+
+[<Struct>]
+type UnitDestroyedData = {
+    UnitId: int
+    AttackerId: int option
+    Position: Vector3  // Last known position
+    DefId: UnitDefId
+}
 ```
 
-### 2. Behavior-Driven Testing with TickSpec
+### Data-Oriented AI Implementation
+
+#### Event Collection Pattern
 
 ```fsharp
-// BDD testing for AI scenarios
-Feature: BAR AI Economic Management
-
-Scenario: Early game resource management
-    Given the AI has 100 metal and 100 energy
-    When the AI receives an update event
-    Then the AI should prioritize energy production
-    And the AI should not build expensive units
-
-Scenario: Resource overflow prevention
-    Given the AI has 10000 metal and 10000 energy
-    When the AI receives an update event  
-    Then the AI should stop building economy
-    And the AI should start building military units
+type DataOrientedAI() =
+    // Mutable state for performance - updated each frame
+    let mutable currentWorld = WorldSnapshot.empty
+    let mutable frameEvents = FrameEvents.empty
+    let mutable eventBuffer = ResizeArray<GameEvent>()
+    
+    // Arrays for different AI subsystems
+    let mutable economyTargets: EconomyTarget[] = [||]
+    let mutable militaryTargets: MilitaryTarget[] = [||]
+    let mutable buildQueue: BuildOrder[] = [||]
+    
+    interface IAI with
+        member this.OnEvent(event: AIEvent) =
+            // Convert to F# event and buffer
+            let fsharpEvent = event |> convertToFSharpEvent
+            eventBuffer.Add(fsharpEvent)
+        
+        member this.OnUpdate(frame: int) =
+            // Process all buffered events for this frame
+            let events = this.ProcessEventBuffer(frame)
+            
+            // Update world state
+            currentWorld <- this.UpdateWorldState(currentWorld, events)
+            
+            // Run AI systems with updated data
+            this.RunEconomySystem(currentWorld, events)
+            this.RunMilitarySystem(currentWorld, events)
+            this.RunBuildSystem(currentWorld, events)
+            
+            // Clear event buffer for next frame
+            eventBuffer.Clear()
+    
+    member private this.ProcessEventBuffer(frame: int) : FrameEvents =
+        // Convert event buffer to structured frame events
+        let unitsCreated = ResizeArray<UnitCreatedData>()
+        let unitsDestroyed = ResizeArray<UnitDestroyedData>()
+        // ... other event arrays
+        
+        for event in eventBuffer do
+            match event with
+            | UnitCreated (f, unitId, builderId) when f = frame =>
+                // Query additional data from game callback
+                let pos = gameCallback.GetUnitPosition(unitId)
+                let defId = gameCallback.GetUnitDefId(unitId)
+                let team = gameCallback.GetUnitTeam(unitId)
+                unitsCreated.Add({
+                    UnitId = unitId
+                    BuilderId = builderId
+                    DefId = defId
+                    Position = pos
+                    Team = team
+                })
+            | UnitDestroyed (f, unitId, attackerId) when f = frame =>
+                // Build destroyed unit data...
+                ()
+            | _ -> ()
+        
+        {
+            Frame = frame
+            UnitsCreated = unitsCreated.ToArray()
+            UnitsDestroyed = unitsDestroyed.ToArray()
+            // ... other arrays
+        }
 ```
 
-## Conclusion
+#### Batch Processing Systems
 
-The .NET AI wrapper can be made highly F#-friendly through careful consideration of:
+```fsharp
+    member private this.RunEconomySystem(world: WorldSnapshot, events: FrameEvents) =
+        // Process economy in batches
+        let myUnits = world.Units |> Map.filter (fun _ unit -> unit.Team = world.MyTeam)
+        
+        // Find idle builders
+        let idleBuilders = 
+            events.UnitsIdle
+            |> Array.filter (fun unitId -> 
+                match Map.tryFind unitId myUnits with
+                | Some unit -> this.IsBuilder(unit.DefId)
+                | None -> false)
+        
+        // Batch assign construction tasks
+        let constructionTasks = this.PlanConstruction(world, idleBuilders)
+        constructionTasks |> Array.iter this.IssueConstructionOrder
+        
+        // Update economy targets array
+        economyTargets <- this.UpdateEconomyTargets(world, events)
+    
+    member private this.RunMilitarySystem(world: WorldSnapshot, events: FrameEvents) =
+        // Process military units in batches
+        let myMilitaryUnits = 
+            world.Units 
+            |> Map.filter (fun _ unit -> 
+                unit.Team = world.MyTeam && this.IsMilitaryUnit(unit.DefId))
+            |> Map.toArray
+            |> Array.map snd
+        
+        // Batch target assignment
+        let enemyUnits = events.EnemiesSpotted |> Array.map (fun id -> world.Units.[id])
+        let assignments = this.AssignTargets(myMilitaryUnits, enemyUnits)
+        assignments |> Array.iter this.IssueAttackOrder
+```
 
-1. **Type Design**: Using nullable types, immutable structs, and readonly collections
-2. **Functional Patterns**: Supporting pattern matching, option types, and functional composition
-3. **F# Wrappers**: Creating F#-specific modules that provide idiomatic interfaces
-4. **Performance**: Considering F#'s functional nature when designing APIs
-5. **Testing**: Supporting F#'s testing frameworks and async workflows
-6. **Advanced F# Features**: Active patterns, computation expressions, units of measure
-7. **Domain Modeling**: Type-safe domain-specific languages and railway-oriented programming
-8. **Reactive Programming**: FRP patterns for event-driven AI behavior
-9. **Type Providers**: Compile-time safety for game data (future enhancement)
-10. **Property-Based Testing**: Robust testing with FsCheck and behavior-driven development
+### Performance Optimizations
 
-By following these guidelines, F# developers can leverage their language's full power for AI development, creating robust, type-safe, and maintainable AI implementations for the BAR game engine while maintaining excellent performance and leveraging F#'s unique strengths in functional programming, domain modeling, and correctness.
+#### Array Processing with SIMD
+
+```fsharp
+// Leverage F#'s array processing for performance
+module ArrayOps =
+    let inline updateUnitHealths (healths: float32[]) (damages: UnitDamagedData[]) =
+        damages
+        |> Array.iter (fun dmg -> 
+            if dmg.UnitId < healths.Length then
+                healths.[dmg.UnitId] <- max 0.0f (healths.[dmg.UnitId] - dmg.Damage))
+    
+    let inline findUnitsInRange (positions: Vector3[]) (center: Vector3) (range: float32) =
+        positions
+        |> Array.mapi (fun i pos -> i, Vector3.Distance(pos, center))
+        |> Array.filter (fun (_, dist) -> dist <= range)
+        |> Array.map fst
+    
+    let inline filterUnitsByType (units: UnitData[]) (targetType: UnitDefId) =
+        units |> Array.filter (fun unit -> unit.DefId = targetType)
+```
+
+#### Memory-Efficient Data Structures
+
+```fsharp
+// Use structs for frequently allocated data
+[<Struct>]
+type TargetAssignment = {
+    AttackerId: int
+    TargetId: int
+    Priority: float32
+    Distance: float32
+}
+
+// Use ArrayPool for temporary arrays
+open System.Buffers
+
+type AISystem() =
+    let arrayPool = ArrayPool<int>.Shared
+    
+    member this.ProcessLargeDataSet(data: int[]) =
+        let tempArray = arrayPool.Rent(data.Length * 2)
+        try
+            // Process data efficiently
+            ()
+        finally
+            arrayPool.Return(tempArray)
+```
+
+### Benefits of Data-Oriented Design
+
+1. **Performance**: Arrays and batch processing are cache-friendly and enable SIMD optimizations
+2. **Clarity**: Separating data from behavior makes the AI logic more understandable
+3. **Testing**: Pure functions operating on data are easier to test
+4. **Concurrency**: Immutable data structures prevent race conditions
+5. **Debugging**: Easy to snapshot and inspect the complete world state
+
+This approach leverages F#'s strengths while providing excellent performance for real-time game AI scenarios.
 
 ## Performance and Design Best Practices Summary
 
