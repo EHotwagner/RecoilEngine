@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>Library</OutputType>
+    <AssemblyName>BAR.AI.FSharp.Example</AssemblyName>
+    <RootNamespace>BAR.AI.FSharp</RootNamespace>
+    
+    <!-- F#-specific settings -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <OtherFlags>--warnon:1182</OtherFlags> <!-- Enable incomplete pattern match warnings -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsAsErrors />
+    <WarningsNotAsErrors>FS0025</WarningsNotAsErrors> <!-- Allow incomplete pattern matches in some cases -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- F# source files in compilation order -->
+    <Compile Include="Types.fs" />
+    <Compile Include="ActivePatterns.fs" />
+    <Compile Include="GameCallback.fs" />
+    <Compile Include="Events.fs" />
+    <Compile Include="Strategy.fs" />
+    <Compile Include="BuildOrders.fs" />
+    <Compile Include="FSharpAI.fs" />
+    <Compile Include="ExampleAI.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Reference to the main .NET wrapper -->
+    <ProjectReference Include="..\src\managed\SpringAI.Wrapper.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- F#-specific packages -->
+    <PackageReference Include="FSharp.Core" Version="8.0.0" />
+    
+    <!-- Optional: Functional programming libraries -->
+    <PackageReference Include="FSharpx.Extras" Version="3.1.0" />
+    <PackageReference Include="Aether" Version="8.3.1" />
+    
+    <!-- Optional: Reactive programming -->
+    <PackageReference Include="System.Reactive" Version="6.0.0" />
+    <PackageReference Include="FSharp.Control.Reactive" Version="5.0.5" />
+    
+    <!-- Testing frameworks -->
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="FsUnit" Version="5.6.0" />
+    <PackageReference Include="FsCheck" Version="2.16.5" />
+    <PackageReference Include="FsCheck.Xunit" Version="2.16.5" />
+    <PackageReference Include="Expecto" Version="10.2.1" />
+    <PackageReference Include="xunit" Version="2.6.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+  </ItemGroup>
+
+</Project>

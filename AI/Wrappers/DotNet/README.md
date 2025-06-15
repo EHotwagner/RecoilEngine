@@ -4,7 +4,19 @@ This directory contains a .NET wrapper for creating AI implementations for the R
 
 ## Overview
 
-The .NET wrapper allows you to write AI implementations in C# and other .NET languages. It provides a bridge between the native C AI interface and managed .NET code, handling marshalling of data types, events, and commands.
+The .NET wrapper allows you to write AI implementations in C#, F#, and other .NET languages. It provides a bridge between the native C AI interface and managed .NET code, handling marshalling of data types, events, and commands.
+
+### F# Support
+
+The wrapper is designed to be highly F#-friendly, with:
+- Type-safe domain modeling using discriminated unions and records
+- Active patterns for pattern matching on game entities
+- Option types instead of null references
+- Railway-oriented programming for error handling
+- Computation expressions for command chaining
+- Functional reactive programming patterns for event handling
+
+See `FSharpConsiderations.md` for detailed F# integration guidelines.
 
 ## Architecture
 
@@ -102,12 +114,17 @@ float metal = Callback.GetMetal();
 
 ## Example AI
 
-See `examples/ExampleDotNetAI.cs` for a complete example that demonstrates:
+See `examples/ExampleDotNetAI.cs` for a complete C# example that demonstrates:
 - Basic initialization
 - Resource monitoring
 - Unit management
 - Enemy engagement
 - Event handling
+
+For F# developers, see:
+- `examples/FSharpAI.fs` - F# AI implementation using functional programming patterns
+- `examples/FSharp/` - Complete F# project structure with type-safe domain modeling
+- `FSharpConsiderations.md` - Comprehensive guide for F# integration and best practices
 
 ## Current Status
 
