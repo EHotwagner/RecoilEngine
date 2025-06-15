@@ -12,7 +12,8 @@ This document provides a comprehensive architecture analysis of the RecoilEngine
 graph TB
     Engine[RecoilEngine Core<br/>30Hz Simulation] --> EventSystem[Immediate Event Callbacks]
     Engine --> AILibraryManager[AI Library Manager]
-    AILibraryManager --> AIInterface[AI Interface Layer]    AIInterface --> DotNetWrapper[Data-Oriented F# Wrapper]
+    AILibraryManager --> AIInterface[AI Interface Layer]
+    AIInterface --> DotNetWrapper[Data-Oriented F# Wrapper]
     
     subgraph "F# Data-Oriented Core"
         WorldArrays[World State Arrays<br/>SOA Layout]
