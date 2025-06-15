@@ -100,6 +100,8 @@ let findNearbyEnemies (spatialGrid: SpatialGrid) (position: Vector3) (radius: fl
 ## BAR Game Content Structure for AI Access
 
 ### Optimized Directory Layout for Data Loading
+
+```mermaid
 sequenceDiagram
     participant Engine as RecoilEngine
     participant BAR as BAR Game
