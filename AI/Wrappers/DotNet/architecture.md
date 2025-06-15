@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-This document provides a comprehensive architecture analysis of the RecoilEngine (Spring) AI system and outlines the requirements for implementing a .NET wrapper for AI development. RecoilEngine uses a layered AI interface architecture that allows external AI implementations to control game units through a standardized callback system.
+This document provides a comprehensive architecture analysis of the RecoilEngine (Spring) AI system and outlines the requirements for implementing a .NET wrapper for AI development. RecoilEngine uses a layered AI interface architecture that allows external AI implementations to control game units through a standardized callback system. 
 
 ## Current AI Architecture Overview
 
