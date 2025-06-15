@@ -227,3 +227,45 @@ type PerformanceMetrics = {
     BatchSize: int
     AllocatedMemory: int64
 }
+
+/// Unit state enumeration for efficient state tracking
+type UnitState =
+    | Idle = 0
+    | Moving = 1
+    | Building = 2
+    | Attacking = 3
+    | Repairing = 4
+    | Reclaiming = 5
+    | Patrolling = 6
+    | Guarding = 7
+
+/// Individual unit representation for data-oriented processing
+[<Struct>]
+type Unit = {
+    Id: int
+    DefId: int
+    Position: Vector3
+    Health: float32<hp>
+    MaxHealth: float32<hp>
+    TeamId: int
+    State: UnitState
+    Faction: BARFaction
+}
+
+/// Simplified world state for data-oriented processing
+[<Struct>]
+type WorldState = {
+    Units: Unit array
+    Resources: ResourceState
+    MapWidth: float32<elmo>
+    MapHeight: float32<elmo>
+    CurrentFrame: int<frame>
+}
+
+/// Command batch execution result
+[<Struct>]
+type CommandBatchResult = {
+    SuccessCount: int
+    FailureCount: int
+    ExecutionTimeMs: float
+}
