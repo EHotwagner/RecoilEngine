@@ -182,6 +182,7 @@ module BAREventConverter =
     let convert (event: AIEvent) : BAREvent =
         match event with
         | :? UnitCreatedEvent as e -> UnitCreated(e.Frame, e.UnitId, e.BuilderId)
+        
         | :? UnitDamagedEvent as e -> UnitDamaged(e.Frame, e.UnitId, e.AttackerId, e.Damage)
         | :? UnitDestroyedEvent as e -> UnitDestroyed(e.Frame, e.UnitId, e.AttackerId)
         | :? UpdateEvent as e -> GameUpdate(e.Frame)
