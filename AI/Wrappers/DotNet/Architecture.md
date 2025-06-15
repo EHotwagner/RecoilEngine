@@ -28,9 +28,8 @@ graph TB
         BuildSystem[Build System<br/>Spatial Placement Logic]
         ScoutSystem[Scout System<br/>Grid-Based Pathfinding]
     end
-    
-    DotNetWrapper --> WorldArrays
-    DotNetWrapper --> EventCollections
+      DotNetWrapper --> EventCollections
+    EventCollections --> WorldArrays
     WorldArrays --> SpatialGrid
     EventCollections --> ArrayOps
     
