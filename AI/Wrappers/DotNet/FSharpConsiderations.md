@@ -131,7 +131,8 @@ type AIEvent = SpringAI.Events.AIEvent
 
 // F#-friendly discriminated union for events
 type BAREvent =
-    | UnitCreated of frame:int * unitId:int * builderId:int    | UnitDamaged of frame:int * unitId:int * attackerId:int * damage:float32
+    | UnitCreated of frame:int * unitId:int * builderId:int    
+    | UnitDamaged of frame:int * unitId:int * attackerId:int * damage:float32
     | UnitDestroyed of frame:int * unitId:int * attackerId:int
     | GameUpdate of frame:int
     | GameInit of aiId:int * savedGame:bool
@@ -182,7 +183,6 @@ module BAREventConverter =
     let convert (event: AIEvent) : BAREvent =
         match event with
         | :? UnitCreatedEvent as e -> UnitCreated(e.Frame, e.UnitId, e.BuilderId)
-        
         | :? UnitDamagedEvent as e -> UnitDamaged(e.Frame, e.UnitId, e.AttackerId, e.Damage)
         | :? UnitDestroyedEvent as e -> UnitDestroyed(e.Frame, e.UnitId, e.AttackerId)
         | :? UpdateEvent as e -> GameUpdate(e.Frame)
