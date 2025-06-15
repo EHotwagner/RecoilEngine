@@ -26,6 +26,30 @@ type FunctionalBARAI() =
     // F# computation expression for command execution
     let command = CommandBuilder(base.Callback)
     
+    // Efficient event conversion using EventType enum (no reflection!)
+    let convertToBAREvent (event: SpringAI.Events.AIEvent) : BAREvent =
+        match event.EventType with
+        | SpringAI.Events.EventType.UnitCreated ->
+            let e = event :?> SpringAI.Events.UnitCreatedEvent
+            UnitCreated(e.Frame, e.UnitId, e.BuilderId)
+        | SpringAI.Events.EventType.UnitDamaged ->
+            let e = event :?> SpringAI.Events.UnitDamagedEvent
+            UnitDamaged(e.Frame, e.UnitId, e.AttackerId, e.Damage)
+        | SpringAI.Events.EventType.UnitDestroyed ->
+            let e = event :?> SpringAI.Events.UnitDestroyedEvent
+            UnitDestroyed(e.Frame, e.UnitId, e.AttackerId)
+        | SpringAI.Events.EventType.Update ->
+            let e = event :?> SpringAI.Events.UpdateEvent
+            GameUpdate(e.Frame)
+        | SpringAI.Events.EventType.Init ->
+            let e = event :?> SpringAI.Events.InitEvent
+            GameInit(e.SkirmishAIId, e.SavedGame)
+        | SpringAI.Events.EventType.Release ->
+            let e = event :?> SpringAI.Events.ReleaseEvent
+            GameRelease(e.Reason)
+        | _ -> 
+            failwith $"Unknown event type: {event.EventType}"
+    
     /// Strategy selection using pattern matching and active patterns
     let selectStrategy (resources: ResourceState) (frame: int<frame>) (threats: ThreatInfo) =
         match frame, resources, threats.Level with

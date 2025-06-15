@@ -131,23 +131,97 @@ type AIEvent = SpringAI.Events.AIEvent
 
 // F#-friendly discriminated union for events
 type BAREvent =
-    | UnitCreated of frame:int * unitId:int * builderId:int
-    | UnitDamaged of frame:int * unitId:int * attackerId:int * damage:float32
+    | UnitCreated of frame:int * unitId:int * builderId:int    | UnitDamaged of frame:int * unitId:int * attackerId:int * damage:float32
     | UnitDestroyed of frame:int * unitId:int * attackerId:int
     | GameUpdate of frame:int
     | GameInit of aiId:int * savedGame:bool
     | GameRelease of reason:int
 
-// Convert C# events to F# discriminated unions
-let convertEvent (event: AIEvent) : BAREvent =
+// Better approach: Add conversion methods directly to C# event classes
+// This avoids runtime type checking and is more efficient
+
+// Option 1: Type extensions on C# classes (recommended)
+type UnitCreatedEvent with
+    member this.ToBAREvent() = UnitCreated(this.Frame, this.UnitId, this.BuilderId)
+
+type UnitDamagedEvent with
+    member this.ToBAREvent() = UnitDamaged(this.Frame, this.UnitId, this.AttackerId, this.Damage)
+
+type UnitDestroyedEvent with
+    member this.ToBAREvent() = UnitDestroyed(this.Frame, this.UnitId, this.AttackerId)
+
+type UpdateEvent with
+    member this.ToBAREvent() = GameUpdate(this.Frame)
+
+type InitEvent with
+    member this.ToBAREvent() = GameInit(this.SkirmishAIId, this.SavedGame)
+
+type ReleaseEvent with
+    member this.ToBAREvent() = GameRelease(this.Reason)
+
+// Usage: Clean and efficient
+let handleEvent (event: AIEvent) =
     match event with
-    | :? UnitCreatedEvent as e -> UnitCreated(e.Frame, e.UnitId, e.BuilderId)
-    | :? UnitDamagedEvent as e -> UnitDamaged(e.Frame, e.UnitId, e.AttackerId, e.Damage)
-    | :? UnitDestroyedEvent as e -> UnitDestroyed(e.Frame, e.UnitId, e.AttackerId)
-    | :? UpdateEvent as e -> GameUpdate(e.Frame)
-    | :? InitEvent as e -> GameInit(e.SkirmishAIId, e.SavedGame)
-    | :? ReleaseEvent as e -> GameRelease(e.Reason)
+    | :? UnitCreatedEvent as e -> e.ToBAREvent()
+    | :? UnitDamagedEvent as e -> e.ToBAREvent()
+    | :? UnitDestroyedEvent as e -> e.ToBAREvent()
+    | :? UpdateEvent as e -> e.ToBAREvent()
+    | :? InitEvent as e -> e.ToBAREvent()
+    | :? ReleaseEvent as e -> e.ToBAREvent()
     | _ -> failwith $"Unknown event type: {event.GetType().Name}"
+
+// Option 2: Even better - Add conversion method to base C# class
+// Modify AIEvent in C# to include:
+// public abstract BAREvent ToBAREvent();
+
+// Then F# usage becomes:
+let handleEventSimple (event: AIEvent) = event.ToBAREvent()
+
+// Option 3: Static conversion module (if you can't modify C# classes)
+module BAREventConverter =
+    let convert (event: AIEvent) : BAREvent =
+        match event with
+        | :? UnitCreatedEvent as e -> UnitCreated(e.Frame, e.UnitId, e.BuilderId)
+        | :? UnitDamagedEvent as e -> UnitDamaged(e.Frame, e.UnitId, e.AttackerId, e.Damage)
+        | :? UnitDestroyedEvent as e -> UnitDestroyed(e.Frame, e.UnitId, e.AttackerId)
+        | :? UpdateEvent as e -> GameUpdate(e.Frame)
+        | :? InitEvent as e -> GameInit(e.SkirmishAIId, e.SavedGame)
+        | :? ReleaseEvent as e -> GameRelease(e.Reason)
+        | _ -> failwith $"Unknown event type: {event.GetType().Name}"
+
+// Option 4: Best approach - Design C# events with F# in mind
+// Modify the C# AIEvent hierarchy to include an EventType enum:
+
+type EventType =
+    | UnitCreated = 1
+    | UnitDamaged = 2
+    | UnitDestroyed = 3
+    | GameUpdate = 4
+    | GameInit = 5
+    | GameRelease = 6
+
+// Then conversion becomes O(1) without reflection:
+let convertEventEfficiently (event: AIEvent) : BAREvent =
+    match event.EventType with
+    | EventType.UnitCreated ->
+        let e = event :?> UnitCreatedEvent
+        UnitCreated(e.Frame, e.UnitId, e.BuilderId)
+    | EventType.UnitDamaged ->
+        let e = event :?> UnitDamagedEvent
+        UnitDamaged(e.Frame, e.UnitId, e.AttackerId, e.Damage)
+    | EventType.UnitDestroyed ->
+        let e = event :?> UnitDestroyedEvent
+        UnitDestroyed(e.Frame, e.UnitId, e.AttackerId)
+    | EventType.GameUpdate ->
+        let e = event :?> UpdateEvent
+        GameUpdate(e.Frame)
+    | EventType.GameInit ->
+        let e = event :?> InitEvent
+        GameInit(e.SkirmishAIId, e.SavedGame)
+    | EventType.GameRelease ->
+        let e = event :?> ReleaseEvent
+        GameRelease(e.Reason)
+    | _ -> failwith $"Unknown event type: {event.EventType}"
 ```
 
 #### Option Type Integration
@@ -838,3 +912,42 @@ The .NET AI wrapper can be made highly F#-friendly through careful consideration
 10. **Property-Based Testing**: Robust testing with FsCheck and behavior-driven development
 
 By following these guidelines, F# developers can leverage their language's full power for AI development, creating robust, type-safe, and maintainable AI implementations for the BAR game engine while maintaining excellent performance and leveraging F#'s unique strengths in functional programming, domain modeling, and correctness.
+
+## Performance and Design Best Practices Summary
+
+### ✅ DO: Efficient Event Conversion
+```fsharp
+// Use EventType enum for O(1) pattern matching
+let convertEvent (event: AIEvent) =
+    match event.EventType with
+    | EventType.UnitCreated -> // Fast enum comparison
+        let e = event :?> UnitCreatedEvent
+        UnitCreated(e.Frame, e.UnitId, e.BuilderId)
+```
+
+### ✅ DO: Type Extensions
+```fsharp
+// Extend C# types with F# methods
+type UnitCreatedEvent with
+    member this.ToBAREvent() = UnitCreated(this.Frame, this.UnitId, this.BuilderId)
+```
+
+### ❌ DON'T: Runtime Type Checking without EventType
+```fsharp
+// Avoid: Slower runtime type checking
+match event with
+| :? UnitCreatedEvent as e -> // Runtime type check on every call
+```
+
+### ✅ DO: Design C# APIs with F# in Mind
+- Add `EventType` enum to base classes
+- Use `IReadOnlyList<T>` instead of arrays
+- Provide nullable reference type annotations
+- Use `init`-only properties for immutability
+
+### ✅ DO: Leverage F#'s Strengths
+- Units of measure for type safety
+- Active patterns for domain modeling  
+- Computation expressions for complex workflows
+- Railway-oriented programming for error handling
+- Agent-based concurrency for non-blocking operations
